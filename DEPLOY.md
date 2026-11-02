@@ -7,8 +7,19 @@ rollback. The arena is a separate service on `127.0.0.1:3400`.
 ## One-time setup (owner)
 
 1. **Rotate the OpenRouter key** (the old one was exposed) and set a credit limit on the new key.
-2. **DNS:** in Cloudflare add `arena.svanda.tech` → the portfolio VPS (proxied, like `svanda.tech`).
-3. **Server** (as root, from a checkout or an unpacked release):
+2. **DNS:** in Cloudflare add `CNAME arena → svanda.tech`, **Proxied**, TTL Auto.
+3. **TLS (zone SSL mode is "Full"):** Cloudflare reaches the origin over HTTPS on 443 without
+   validating the certificate. Create a Cloudflare **Origin Certificate** (SSL/TLS → Origin Server
+   → Create certificate, hosts `*.svanda.tech, svanda.tech`, 15 years) and save it on the server:
+   ```bash
+   sudo install -d -m 0750 /etc/ssl/cloudflare
+   sudo nano /etc/ssl/cloudflare/svanda.tech.pem   # paste "Origin Certificate"
+   sudo nano /etc/ssl/cloudflare/svanda.tech.key   # paste "Private key"
+   sudo chmod 0640 /etc/ssl/cloudflare/svanda.tech.key
+   ```
+   If the portfolio's nginx already serves a certificate covering `*.svanda.tech`
+   (`sudo nginx -T | grep -E "server_name|ssl_certificate"`), point `ops/nginx-arena.conf` at it instead.
+4. **Server** (as root, from a checkout or an unpacked release):
    ```bash
    sudo bash ops/bootstrap-arena.sh            # user, dirs, systemd unit, sudoers for 'deploy'
    sudo cp ops/nginx-arena.conf /etc/nginx/sites-available/arena.svanda.tech
@@ -17,7 +28,7 @@ rollback. The arena is a separate service on `127.0.0.1:3400`.
    sudo nano /var/www/llm-arena/.env.production   # values from .env.example; LLM_ARENA_TRUST_PROXY=cloudflare
    ```
    Requires Node ≥ 22.13 on the server (built-in `node:sqlite`). `llm-arena-activate` refuses to run otherwise.
-4. **GitHub** (repo `EmperorKunDis/llm-arena` → Settings):
+5. **GitHub** (repo `EmperorKunDis/llm-arena` → Settings):
    - Secrets: `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS` (same values as in `macos-portfolio`).
    - Variables: `VPS_HOST`, `VPS_PORT`, `VPS_USER` (same as the portfolio), `ARENA_DEPLOY_ENABLED=true`.
    - Environment `production` (optionally with required reviewers).
