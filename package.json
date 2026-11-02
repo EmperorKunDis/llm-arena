@@ -1,0 +1,20 @@
+{
+  "name": "llm-arena",
+  "version": "0.1.0",
+  "description": "Open-source Screeps-like PvP where LLM-written bots battle. Deterministic integer engine; a leaderboard measures which (free) model plays best.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "demo": "node src/runner/demo.js"
+  },
+  "exports": {
+    "./engine": "./src/engine/engine.js",
+    "./mapgen": "./src/engine/mapgen.js",
+    "./runner": "./src/runner/match.js"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}
