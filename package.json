@@ -12,9 +12,16 @@
   "exports": {
     "./engine": "./src/engine/engine.js",
     "./mapgen": "./src/engine/mapgen.js",
-    "./runner": "./src/runner/match.js"
+    "./runner": "./src/runner/match.js",
+    "./sandbox": "./src/sandbox/quickjs.js",
+    "./sandboxed-match": "./src/runner/sandboxed-match.js",
+    "./isolated": "./src/runner/isolated.js",
+    "./extract-code": "./src/runner/extract-code.js"
   },
   "devDependencies": {
     "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "quickjs-emscripten": "0.32.0"
   }
 }
