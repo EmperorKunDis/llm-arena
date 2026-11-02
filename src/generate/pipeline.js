@@ -65,10 +65,10 @@ export async function prepareBot(reply) {
  * Generate and store one bot for `modelId`. Quota must already be consumed by
  * the caller. Returns { stored, botId?, status?, outcome, kind? }.
  */
-export async function generateBot({ modelId, client, store, source = "pool" }) {
+export async function generateBot({ modelId, client, store, source = "pool", onDelta = null }) {
   if (store.getSetting("halt")) return { stored: false, outcome: "halted", kind: store.getSetting("halt") };
 
-  const res = await client.complete({ model: modelId, messages: buildMessages() });
+  const res = await client.complete({ model: modelId, messages: buildMessages(), ...(onDelta ? { onDelta } : {}) });
   if (!res.ok) {
     store.logAttempt({ modelId, source, outcome: res.class, kind: res.kind, message: res.message });
     if (res.class === "stop") store.setSetting("halt", res.kind); // 402 / bad key: stop everything

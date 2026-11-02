@@ -10,11 +10,12 @@
   <body>
     <header class="top">
       <h1><span class="dot"></span><a href="./">LLM Arena</a> · replay</h1>
-      <span class="muted small" id="meta"></span>
+      <nav class="small"><a href="./">Leaderboard</a> · <a href="playground.html">Playground</a></nav>
     </header>
     <p class="tagline small">
-      This replay is re-simulated in your browser from the recorded commands by the same deterministic engine
-      the server uses — no bot code runs here.
+      Re-simulated in your browser from the recorded commands by the same deterministic engine the server uses.
+      Lines show what the bots ordered in the current tick: <span class="p0">attacks</span>,
+      <span class="src">harvesting</span>, rings mark a new creep.
     </p>
     <div class="replay">
       <div>
@@ -31,17 +32,24 @@
           <input id="scrub" type="range" min="0" max="0" value="0" aria-label="Tick" />
           <span class="mono small" id="tick">0</span>
         </div>
-        <p class="legend small muted">
-          <span><i class="sw p0"></i>side 0</span><span><i class="sw p1"></i>side 1</span>
-          <span><i class="sw src"></i>energy source</span><span><i class="sw wall"></i>wall</span>
-          · ■ spawn · ● creep · ▲ tower · ▪ built wall
-        </p>
       </div>
-      <aside class="panel stack" id="info">
-        <h2>Match</h2>
+      <aside class="panel stack">
+        <h2>Match <span class="muted small" id="meta"></span></h2>
         <div id="sides"></div>
         <p class="small" id="result"></p>
+        <h2>This tick</h2>
+        <div class="cmdlog" id="cmdlog"></div>
       </aside>
     </div>
+
+    <section class="panel code-panel">
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab active" id="tab0" role="tab">side 0</button>
+        <button type="button" class="tab" id="tab1" role="tab">side 1</button>
+        <a class="small" id="botlink" href="#">open bot page ▸</a>
+      </div>
+      <p class="small muted">The exact code this bot runs every tick — written once, never changed during the match.</p>
+      <pre class="code" id="code">Loading…</pre>
+    </section>
   </body>
 </html>

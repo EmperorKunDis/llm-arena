@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS bots (
   model_actual TEXT,
   provider TEXT,
   prompt_version TEXT NOT NULL,
-  source TEXT NOT NULL CHECK (source IN ('pool','live','reference')),
+  source TEXT NOT NULL CHECK (source IN ('pool','live','reference','user')),
   status TEXT NOT NULL CHECK (status IN ('valid','invalid')),
   error_kind TEXT,
   error_message TEXT,
@@ -77,6 +77,22 @@ export function openStore(path = ":memory:") {
   db.exec("PRAGMA foreign_keys = ON;");
   if (path !== ":memory:") db.exec("PRAGMA journal_mode = WAL;");
   db.exec(SCHEMA);
+  // Migration: databases created before user-submitted bots have a narrower CHECK.
+  const botsSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'bots'").get()?.sql || "";
+  if (!botsSql.includes("'user'")) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      db.exec("ALTER TABLE bots RENAME TO bots_old");
+      db.exec("DROP INDEX IF EXISTS bots_model");
+      db.exec(SCHEMA);
+      db.exec("INSERT INTO bots SELECT * FROM bots_old");
+      db.exec("DROP TABLE bots_old");
+      db.exec("COMMIT");
+    } catch (e) {
+      db.exec("ROLLBACK");
+      throw e;
+    }
+  }
 
   const tx = (fn) => {
     db.exec("BEGIN IMMEDIATE");

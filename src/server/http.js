@@ -9,7 +9,9 @@ import { fileURLToPath } from "node:url";
 import { leaderboardView, matchesView, matchDetailView, publicBot } from "./views.js";
 import { reserveLive } from "./service.js";
 import { generateBot } from "../generate/pipeline.js";
-import { randomUUID } from "node:crypto";
+import { createJobs } from "./jobs.js";
+import { submitUserBot } from "./submit.js";
+import { opponents } from "./arena.js";
 import { quotaConfig, usage } from "./quota.js";
 import { readFileSync } from "node:fs";
 
@@ -85,8 +87,15 @@ async function serveStatic(res, pathname) {
     try {
       const data = await readFile(file);
       const type = TYPES[extname(file)] || "application/octet-stream";
+      // The playground worker evaluates the visitor's own bot in their own browser
+      // (preview only); it is the only script allowed to use eval. Server-side,
+      // every bot still runs exclusively in the QuickJS sandbox.
+      const workerCsp = file.endsWith("playground-worker.js")
+        ? { "Content-Security-Policy": "default-src 'none'; script-src 'self' 'unsafe-eval'; connect-src 'self'" }
+        : {};
       res.writeHead(200, {
         ...SECURITY_HEADERS,
+        ...workerCsp,
         "Content-Type": type,
         "Cache-Control": type.startsWith("text/html") ? "no-cache" : "public, max-age=300",
       });
@@ -98,23 +107,10 @@ async function serveStatic(res, pathname) {
   return send(res, 404, { error: "not_found" });
 }
 
-export function createArenaServer({ store, client, env = process.env, onGenerated = () => {} }) {
-  // Live generation runs as a background job: free models can write for 2+
-  // minutes, longer than Cloudflare's 100 s proxy timeout. The browser polls.
-  const jobs = new Map();
-  const pruneJobs = () => {
-    const cutoff = Date.now() - 60 * 60 * 1000;
-    for (const [id, j] of jobs) if (j.startedAt < cutoff) jobs.delete(id);
-  };
-  // `state` is the job's lifecycle; `status` (valid/invalid) belongs to the bot.
-  const jobView = (id, j) => ({
-    ...(j.result || {}),
-    jobId: id,
-    state: j.state,
-    model: j.modelId,
-    elapsedSeconds: Math.round(((j.finishedAt || Date.now()) - j.startedAt) / 1000),
-  });
-
+export function createArenaServer({ store, client, env = process.env, onGenerated = () => {}, jobs = createJobs() }) {
+  // Live generation runs as a background job (free models can write for 2+
+  // minutes, longer than Cloudflare's 100 s proxy timeout); the browser polls and
+  // sees the streamed text. The same registry shows background pool filling.
   return createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
     const p = url.pathname;
@@ -166,30 +162,38 @@ export function createArenaServer({ store, client, env = process.env, onGenerate
             r.error === "quota" ? 429 : r.error === "unknown_model" ? 400 : 503;
           return send(res, status, r);
         }
-        pruneJobs();
-        const jobId = randomUUID();
-        const job = { state: "running", modelId: body.modelId, startedAt: Date.now() };
-        jobs.set(jobId, job);
-        generateBot({ modelId: body.modelId, client, store, source: "live" })
+        const job = jobs.start({ modelId: body.modelId, source: "live" });
+        generateBot({ modelId: body.modelId, client, store, source: "live", onDelta: jobs.onDelta(job) })
           .then((out) => {
-            job.result = { ok: out.stored, ...out };
+            jobs.finish(job, { ok: out.stored, ...out });
             if (out.stored) onGenerated(out);
           })
-          .catch((e) => {
-            job.result = { ok: false, outcome: "infra", kind: "internal_error", message: String(e?.message || e).slice(0, 200) };
-          })
-          .finally(() => {
-            job.state = "done";
-            job.finishedAt = Date.now();
-          });
-        return send(res, 202, jobView(jobId, job));
+          .catch((e) =>
+            jobs.finish(job, { ok: false, outcome: "infra", kind: "internal_error", message: String(e?.message || e).slice(0, 200) }),
+          );
+        return send(res, 202, jobs.view(job));
       }
 
       mm = p.match(/^\/api\/jobs\/([0-9a-f-]{36})$/);
       if (req.method === "GET" && mm) {
         const job = jobs.get(mm[1]);
         if (!job) return send(res, 404, { error: "not_found" });
-        return send(res, 200, jobView(mm[1], job), { "Cache-Control": "no-store" });
+        const since = Math.max(0, Number(url.searchParams.get("since")) || 0);
+        return send(res, 200, jobs.view(job, { since }), { "Cache-Control": "no-store" });
+      }
+
+      if (req.method === "GET" && p === "/api/activity")
+        return send(res, 200, jobs.activity(), { "Cache-Control": "no-store" });
+
+      if (req.method === "GET" && p === "/api/opponents")
+        return send(res, 200, { opponents: opponents(store) }, { "Cache-Control": "public, max-age=60" });
+
+      if (req.method === "POST" && p === "/api/submit") {
+        const body = await readJson(req, 80 * 1024);
+        const out = await submitUserBot({ store, ip: clientIp(req, env), name: body.name, code: body.code, cfg: quotaConfig(env) });
+        if (out.ok) onGenerated(out);
+        const status = out.ok ? 201 : out.error === "quota" ? 429 : out.error === "not_configured" ? 503 : out.error === "duplicate" ? 409 : 400;
+        return send(res, status, out);
       }
 
       if (req.method === "GET" || req.method === "HEAD") return serveStatic(res, p);

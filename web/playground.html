@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Playground — write your own agent · LLM Arena</title>
+    <link rel="stylesheet" href="app.css" />
+    <script type="module" src="playground.js"></script>
+  </head>
+  <body>
+    <header class="top">
+      <h1><span class="dot"></span><a href="./">LLM Arena</a> · playground</h1>
+      <nav class="small"><a href="./">Leaderboard</a></nav>
+    </header>
+    <p class="tagline">
+      Write your own agent, test it against the reference bots or any model's bot right here in your browser,
+      then submit it — it joins the arena and plays every free model.
+    </p>
+
+    <div class="playground">
+      <section class="panel stack">
+        <div class="row">
+          <h2>Your bot</h2>
+          <span class="small muted">plain JavaScript · define <code>loop(state, api)</code></span>
+        </div>
+        <textarea id="editor" spellcheck="false" aria-label="Bot code"></textarea>
+        <div class="row">
+          <button type="button" class="ghost" id="reset">Reset to template</button>
+          <span class="small muted" id="saved"></span>
+        </div>
+        <details>
+          <summary class="small">Bot API (TypeScript types)</summary>
+          <pre class="code" id="api">Loading…</pre>
+        </details>
+      </section>
+
+      <section class="stack">
+        <div class="panel stack">
+          <h2>Test match</h2>
+          <label class="small muted" for="opponent">Opponent</label>
+          <select id="opponent"></select>
+          <div class="row">
+            <label class="small muted" for="seed">Map seed</label>
+            <input id="seed" type="number" min="1" value="42" />
+            <button type="button" class="ghost" id="reseed">Random map</button>
+          </div>
+          <button type="button" id="run">Run test match</button>
+          <div class="status" id="run-status" role="status" aria-live="polite"></div>
+          <canvas id="board" width="500" height="420" aria-label="Test match board"></canvas>
+          <div class="controls">
+            <button id="play" type="button" class="ghost" disabled>Play</button>
+            <input id="scrub" type="range" min="0" max="0" value="0" aria-label="Tick" />
+            <span class="mono small" id="tick">0</span>
+          </div>
+          <div class="cmdlog" id="cmdlog"></div>
+        </div>
+
+        <div class="panel stack">
+          <h2>Submit to the arena</h2>
+          <p class="small muted">
+            The server re-checks your bot in its sandbox, then it plays every model twice (sides swapped) and
+            appears on the leaderboard as <code>user/your-name</code>. Limit 5 submissions per day.
+          </p>
+          <input id="name" type="text" maxlength="24" placeholder="agent name (3–24 chars)" aria-label="Agent name" />
+          <button type="button" id="submit">Submit</button>
+          <div class="status" id="submit-status" role="status" aria-live="polite"></div>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

@@ -51,6 +51,7 @@ export async function fillPool({
   sleepMs = 3500, // OpenRouter free tier: 20 requests/minute
   maxInfraStreak = 3,
   log = () => {},
+  track = null, // optional (modelId) => ({ onDelta, done(out) }) to expose live progress
 }) {
   const summary = { calls: 0, stored: 0, valid: 0, invalid: 0, infra: 0, stoppedBy: null };
   let infraStreak = 0;
@@ -61,7 +62,9 @@ export async function fillPool({
       if (!q.ok) return { ...summary, stoppedBy: "quota" };
       if (summary.calls > 0 && sleepMs) await sleep(sleepMs);
       summary.calls++;
-      const out = await generateBot({ modelId: m.id, client, store, source: "pool" });
+      const t = track ? track(m.id) : null;
+      const out = await generateBot({ modelId: m.id, client, store, source: "pool", ...(t ? { onDelta: t.onDelta } : {}) });
+      if (t) t.done(out);
       log(m.id, out);
       if (out.outcome === "infra" || out.outcome === "rejected") {
         summary.infra++;

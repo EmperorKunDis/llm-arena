@@ -1,4 +1,5 @@
 import { getJson, STATIC } from "./data.js";
+import { Board, ReplayPlayer } from "./board.js";
 
 // Leaderboard page. All untrusted strings (model ids, errors) go through
 // textContent, never innerHTML.
@@ -30,6 +31,7 @@ async function loadLeaderboard() {
     const name = el("td", {}, [
       el("span", { class: "mono", text: short(r.id) }),
       r.reference ? el("span", { class: "badge ref", text: "reference" }) : null,
+      r.user ? el("span", { class: "badge agent", text: "agent" }) : null,
       !r.reference && r.rating !== null && r.provisional ? el("span", { class: "badge prov", text: "provisional" }) : null,
       !r.active ? el("span", { class: "badge off", text: "inactive" }) : null,
     ]);
@@ -149,7 +151,84 @@ async function generate() {
   loadModels();
 }
 
+// ---- live OpenRouter activity ------------------------------------------------
+const liveBoxes = new Map(); // jobId -> { root, code, think }
+function renderActivity(act) {
+  const box = $("live");
+  const running = act.running || [];
+  $("live-count").textContent = running.length ? `${running.length} running` : "idle";
+  $("live-count").classList.toggle("on", running.length > 0);
+  for (const [id, b] of liveBoxes) if (!running.find((j) => j.jobId === id)) (b.root.remove(), liveBoxes.delete(id));
+  if (!running.length && !box.children.length)
+    box.replaceChildren(el("p", { class: "small muted", text: "No model is writing right now. Press Generate, or wait for the next pool run." }));
+  for (const j of running) {
+    let b = liveBoxes.get(j.jobId);
+    if (!b) {
+      if (!liveBoxes.size) box.replaceChildren();
+      const head = el("div", { class: "row small" }, [
+        el("span", { class: "mono", text: short(j.model) }),
+        el("span", { class: `badge ${j.source === "live" ? "agent" : "prov"}`, text: j.source === "live" ? "visitor" : "pool" }),
+      ]);
+      const meta = el("div", { class: "small muted" });
+      const think = el("div", { class: "think small" });
+      const code = el("pre", { class: "code stream" });
+      const root = el("div", { class: "livejob" }, [head, meta, think, code]);
+      box.append(root);
+      b = { root, meta, think, code };
+      liveBoxes.set(j.jobId, b);
+    }
+    b.meta.textContent = `${j.elapsedSeconds}s · ${j.contentLength} chars of code${j.reasoningLength ? ` · ${j.reasoningLength} chars of reasoning` : ""}`;
+    b.think.textContent = j.reasoningTail && !j.contentLength ? `thinking… ${j.reasoningTail.slice(-300)}` : "";
+    const atBottom = b.code.scrollTop + b.code.clientHeight >= b.code.scrollHeight - 20;
+    b.code.textContent = j.content || (j.reasoningLength ? "" : "waiting for the first tokens…");
+    b.code.hidden = !b.code.textContent;
+    if (atBottom) b.code.scrollTop = b.code.scrollHeight;
+  }
+  const recent = (act.recent || []).slice(0, 5);
+  $("recent-gen").replaceChildren(
+    ...(recent.length ? [el("div", { class: "muted", text: "Recently finished" })] : []),
+    ...recent.map((j) =>
+      el("div", { class: "match" }, [
+        el("span", { class: "mono", text: short(j.model) }),
+        j.botId
+          ? el("a", { href: `bot.html?id=${j.botId}`, text: `${j.status}${j.kind ? ` (${j.kind})` : ""} · ${j.elapsedSeconds}s ▸` })
+          : el("span", { class: "muted", text: `${j.outcome}: ${j.kind} · ${j.elapsedSeconds}s` }),
+      ]),
+    ),
+  );
+}
+async function loadActivity() {
+  if (STATIC) return;
+  const { ok, body } = await getJson("activity");
+  if (ok) renderActivity(body);
+}
+
+// ---- featured match (latest decisive match, autoplay) -------------------------
+async function loadFeatured() {
+  const { ok, body } = await getJson("matches?limit=30");
+  if (!ok || !body.matches.length) return ($("featured-title").textContent = "No matches yet.");
+  const pick = body.matches.find((m) => m.winner !== null && m.reason !== "model_error") || body.matches[0];
+  const d = await getJson(`matches/${pick.id}`);
+  if (!d.ok) return;
+  const m = d.body;
+  $("featured-link").href = `replay.html?id=${m.id}`;
+  $("featured-title").replaceChildren(
+    el("span", { class: "p0 mono", text: short(m.bots[0].model) }),
+    el("span", { class: "muted", text: " vs " }),
+    el("span", { class: "p1 mono", text: short(m.bots[1].model) }),
+  );
+  const fp = new ReplayPlayer(m.record, new Board($("featured")), (p) => {
+    $("featured-tick").textContent = `tick ${p.state.tick} · ${p.scores()[0]} : ${p.scores()[1]}`;
+  });
+  fp.speed = 6;
+  fp.loop = true;
+  fp.toggle(true);
+}
+
 $("gen").addEventListener("click", generate);
+loadActivity();
+loadFeatured();
+setInterval(loadActivity, 1500);
 loadLeaderboard();
 loadMatches();
 loadModels();

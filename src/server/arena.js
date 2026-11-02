@@ -34,11 +34,11 @@ export function seedReferenceBots(store) {
   return added;
 }
 
-/** Bots that take part in rated play: valid bots of the current prompt + references. */
+/** Bots that take part in rated play: valid bots of the current prompt, references and user agents. */
 export function ratedBots(store, promptVersion = PROMPT_VERSION) {
   return store
     .listBots({ status: "valid" })
-    .filter((b) => b.prompt_version === promptVersion || b.source === "reference");
+    .filter((b) => b.prompt_version === promptVersion || b.source === "reference" || b.source === "user");
 }
 
 // Deterministic seed per pair, so a pair always meets on the same map.
@@ -129,7 +129,7 @@ export function leaderboard(store, promptVersion = PROMPT_VERSION) {
 
   const generated = new Map();
   for (const b of bots.values()) {
-    if (b.source === "reference" || b.prompt_version !== promptVersion) continue;
+    if (b.source === "reference" || (b.source !== "user" && b.prompt_version !== promptVersion)) continue;
     const s = generated.get(b.model_id) || { total: 0, valid: 0 };
     s.total++;
     if (b.status === "valid") s.valid++;
@@ -141,14 +141,16 @@ export function leaderboard(store, promptVersion = PROMPT_VERSION) {
   const rows = rate(games, players).map((r) => {
     const gen = generated.get(r.id);
     const isRef = r.id.startsWith("reference/");
+    const isUser = r.id.startsWith("user/");
     return {
       ...r,
       reference: isRef,
+      user: isUser,
       provisional: r.games < PROVISIONAL_GAMES,
       bots: gen?.total ?? (isRef ? 1 : 0),
       validBots: gen?.valid ?? (isRef ? 1 : 0),
       validShare: gen ? gen.valid / gen.total : isRef ? 1 : null,
-      active: isRef ? true : catalog.get(r.id)?.active === 1,
+      active: isRef || isUser ? true : catalog.get(r.id)?.active === 1,
     };
   });
   for (const id of unrated) {
@@ -163,12 +165,22 @@ export function leaderboard(store, promptVersion = PROMPT_VERSION) {
       draws: 0,
       games: 0,
       reference: false,
+      user: id.startsWith("user/"),
       provisional: true,
       bots: gen.total,
       validBots: gen.valid,
       validShare: gen.valid / gen.total,
-      active: catalog.get(id)?.active === 1,
+      active: id.startsWith("user/") || catalog.get(id)?.active === 1,
     });
   }
   return rows;
+}
+
+/** Opponents for the in-browser playground: reference bots + the newest valid bot of each model/agent. */
+export function opponents(store, promptVersion = PROMPT_VERSION) {
+  const latest = new Map();
+  for (const b of ratedBots(store, promptVersion)) latest.set(b.model_id, b);
+  return [...latest.values()]
+    .sort((x, y) => (x.source === "reference") - (y.source === "reference") || (x.model_id < y.model_id ? -1 : 1))
+    .map((b) => ({ id: b.id, model: b.model_id, source: b.source, code: b.code }));
 }

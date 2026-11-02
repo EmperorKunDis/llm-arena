@@ -65,7 +65,9 @@ export function createOpenRouterClient({
 
     // Reasoning models spend tokens thinking before they answer: a low cap cut
     // bots off mid-line in Phase 0, so allow a long reply and ask for low effort.
-    async complete({ model, messages, maxTokens = 16000, temperature = 0.2 }) {
+    // With `onDelta` the reply is STREAMED: every chunk of reasoning/code is
+    // passed on as it arrives, so the site can show the model writing live.
+    async complete({ model, messages, maxTokens = 16000, temperature = 0.2, onDelta = null }) {
       if (!apiKey) return { ok: false, class: "stop", kind: "missing_api_key" };
       const body = {
         model, // exactly one model; deliberately no `models` fallback array
@@ -74,36 +76,126 @@ export function createOpenRouterClient({
         temperature,
         provider: { allow_fallbacks: false },
         reasoning: { effort: "low" },
+        ...(onDelta ? { stream: true } : {}),
       };
-      const { res, json, netError, message } = await request("/chat/completions", {
-        method: "POST",
-        headers: headers(),
-        body: JSON.stringify(body),
-      });
-      if (netError) return { ok: false, class: "infra", kind: netError, message };
-      if (!res.ok) {
-        const e = json?.error || {};
-        const raw = e.metadata?.raw ? ` | ${typeof e.metadata.raw === "string" ? e.metadata.raw : JSON.stringify(e.metadata.raw)}` : "";
-        return { ok: false, ...classifyStatus(res.status), status: res.status, message: `${e.message || ""}${raw}`.slice(0, 400) };
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        let res;
+        try {
+          res = await fetchImpl(`${BASE}/chat/completions`, {
+            method: "POST",
+            headers: headers(),
+            body: JSON.stringify(body),
+            signal: ctrl.signal,
+          });
+        } catch (e) {
+          return { ok: false, class: "infra", kind: e?.name === "AbortError" ? "timeout" : "network_error", message: String(e?.message || e) };
+        }
+        const isStream = (res.headers.get("content-type") || "").includes("text/event-stream");
+        if (!res.ok || !isStream) {
+          let json = null;
+          try {
+            json = JSON.parse(await res.text());
+          } catch {
+            /* non-JSON */
+          }
+          return fromJson(res, json, model);
+        }
+        return await fromStream(res, model, onDelta);
+      } catch (e) {
+        return { ok: false, class: "infra", kind: e?.name === "AbortError" ? "timeout" : "stream_error", message: String(e?.message || e).slice(0, 200) };
+      } finally {
+        clearTimeout(timer);
       }
-      if (!json) return { ok: false, class: "infra", kind: "bad_response" };
-      // OpenRouter can return 200 with an error object (e.g. upstream rate limit).
-      if (json?.error) {
-        const c = classifyStatus(Number(json.error.code) || 502);
-        return { ok: false, ...c, status: Number(json.error.code) || 502, message: String(json.error.message || "").slice(0, 300) };
-      }
-      const choice = json?.choices?.[0];
-      const content = choice?.message?.content;
-      if (typeof content !== "string" || content.trim() === "")
-        return { ok: false, class: "infra", kind: "empty_response" };
-      return {
-        ok: true,
-        content,
-        modelActual: json.model || model,
-        provider: json.provider || null,
-        usage: json.usage || null,
-        finishReason: choice?.finish_reason || null,
-      };
     },
   };
+
+  function fromJson(res, json, model) {
+    if (!res.ok) {
+      const e = json?.error || {};
+      const raw = e.metadata?.raw ? ` | ${typeof e.metadata.raw === "string" ? e.metadata.raw : JSON.stringify(e.metadata.raw)}` : "";
+      return { ok: false, ...classifyStatus(res.status), status: res.status, message: `${e.message || ""}${raw}`.slice(0, 400) };
+    }
+    if (!json) return { ok: false, class: "infra", kind: "bad_response" };
+    // OpenRouter can return 200 with an error object (e.g. upstream rate limit).
+    if (json.error) {
+      const c = classifyStatus(Number(json.error.code) || 502);
+      return { ok: false, ...c, status: Number(json.error.code) || 502, message: String(json.error.message || "").slice(0, 300) };
+    }
+    const choice = json.choices?.[0];
+    const content = choice?.message?.content;
+    if (typeof content !== "string" || content.trim() === "") return { ok: false, class: "infra", kind: "empty_response" };
+    return {
+      ok: true,
+      content,
+      modelActual: json.model || model,
+      provider: json.provider || null,
+      usage: json.usage || null,
+      finishReason: choice?.finish_reason || null,
+    };
+  }
+
+  // Server-sent events: "data: {chunk}" lines, ": comment" keep-alives, "data: [DONE]".
+  async function fromStream(res, model, onDelta) {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let content = "";
+    let reasoning = "";
+    let finishReason = null;
+    let modelActual = model;
+    let provider = null;
+    let usage = null;
+    let error = null;
+    const handle = (line) => {
+      if (!line.startsWith("data:")) return false;
+      const data = line.slice(5).trim();
+      if (data === "[DONE]") return true;
+      let chunk;
+      try {
+        chunk = JSON.parse(data);
+      } catch {
+        return false;
+      }
+      if (chunk.error) error = chunk.error;
+      if (chunk.model) modelActual = chunk.model;
+      if (chunk.provider) provider = chunk.provider;
+      if (chunk.usage) usage = chunk.usage;
+      const choice = chunk.choices?.[0];
+      const d = choice?.delta || {};
+      if (typeof d.reasoning === "string" && d.reasoning) {
+        reasoning += d.reasoning;
+        onDelta({ reasoning: d.reasoning });
+      }
+      if (typeof d.content === "string" && d.content) {
+        content += d.content;
+        onDelta({ content: d.content });
+      }
+      if (choice?.finish_reason) finishReason = choice.finish_reason;
+      return false;
+    };
+    let done = false;
+    while (!done) {
+      const { value, done: end } = await reader.read();
+      if (end) break;
+      buf += decoder.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (line && handle(line)) {
+          done = true;
+          break;
+        }
+      }
+    }
+    if (buf.trim()) handle(buf.trim());
+    if (error) {
+      const c = classifyStatus(Number(error.code) || 502);
+      return { ok: false, ...c, status: Number(error.code) || 502, message: String(error.message || "").slice(0, 300) };
+    }
+    if (content.trim() === "") return { ok: false, class: "infra", kind: reasoning ? "only_reasoning" : "empty_response" };
+    return { ok: true, content, modelActual, provider, usage, finishReason, reasoningChars: reasoning.length };
+  }
 }

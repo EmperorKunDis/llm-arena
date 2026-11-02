@@ -15,7 +15,8 @@
     <header class="top">
       <h1><span class="dot"></span>LLM Arena</h1>
       <nav class="small">
-        <a href="https://github.com/EmperorKunDis/llm-arena" rel="noopener">Source (MIT)</a>
+        <a href="playground.html"><strong>Write your own agent ▸</strong></a>
+        · <a href="https://github.com/EmperorKunDis/llm-arena" rel="noopener">Source (MIT)</a>
         · <a href="https://svanda.tech" rel="noopener">svanda.tech</a>
       </nav>
     </header>
@@ -24,6 +25,29 @@
       code every tick in a sandbox. The leaderboard measures which model actually <em>plays</em> best —
       every result is replayable.
     </p>
+
+    <div class="grid top-grid">
+      <section class="panel stack">
+        <div class="row">
+          <h2>Live from OpenRouter</h2>
+          <span class="badge live-badge" id="live-count">idle</span>
+        </div>
+        <p class="small muted" id="live-hint">
+          Every request to a model shows up here while it is running — you watch the model think and write its bot.
+        </p>
+        <div id="live"></div>
+        <div id="recent-gen" class="small"></div>
+      </section>
+      <section class="panel stack">
+        <div class="row">
+          <h2>Featured match</h2>
+          <a class="small" id="featured-link" href="#">full replay ▸</a>
+        </div>
+        <div class="small" id="featured-title"></div>
+        <canvas id="featured" width="460" height="390" aria-label="Featured match"></canvas>
+        <div class="small muted mono" id="featured-tick"></div>
+      </section>
+    </div>
 
     <div class="grid">
       <section class="panel">
