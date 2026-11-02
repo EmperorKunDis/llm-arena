@@ -4,7 +4,21 @@ Same VPS and the same release pattern as the svanda.tech portfolio: immutable re
 `/var/www/llm-arena/releases/<sha>`, a `current` symlink, systemd, health check with automatic
 rollback. The arena is a separate service on `127.0.0.1:3400`.
 
-## One-time setup (owner)
+## Fastest path: one command on the server
+
+DNS (`CNAME arena → svanda.tech`, proxied) is already in place. On the VPS run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/EmperorKunDis/llm-arena/main/ops/install.sh | sudo bash
+```
+
+It installs the latest `main` into `/var/www/llm-arena`, creates the service user and secrets,
+reuses the portfolio's nginx certificate (or a self-signed one — fine for Cloudflare "Full"),
+validates nginx (reverting on failure, portfolio untouched), starts the service and checks it.
+Re-run the same command to update. Live generation stays off until `OPENROUTER_API_KEY` is set in
+`/var/www/llm-arena/.env.production` (then `sudo systemctl restart llm-arena`).
+
+## One-time setup (owner, manual alternative)
 
 1. **Rotate the OpenRouter key** (the old one was exposed) and set a credit limit on the new key.
 2. **DNS:** in Cloudflare add `CNAME arena → svanda.tech`, **Proxied**, TTL Auto.
