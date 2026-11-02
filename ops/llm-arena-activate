@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Switch /var/www/llm-arena/current to an uploaded release, restart, health-check,
+# and roll back automatically if the new release does not come up.
+set -Eeuo pipefail
+readonly root=/var/www/llm-arena
+readonly current="$root/current"
+
+[[ $EUID -eq 0 ]] || { echo "llm-arena-activate must run as root." >&2; exit 77; }
+[[ $# -eq 1 && $1 =~ ^[0-9a-f]{40}$ ]] || { echo "Usage: llm-arena-activate FULL_GIT_SHA" >&2; exit 64; }
+readonly sha=$1
+readonly release="$root/releases/$sha"
+[[ -d $release && ! -L $release && $(realpath -e "$release") == "$release" ]] || { echo "Unsafe or missing release: $release" >&2; exit 66; }
+for f in DEPLOY_SHA scripts/serve.js src/engine/engine.js node_modules/quickjs-emscripten/package.json; do
+  [[ -f $release/$f ]] || { echo "Release incomplete: missing $f" >&2; exit 66; }
+done
+[[ $(tr -d '\r\n' < "$release/DEPLOY_SHA") == "$sha" ]] || { echo "Release marker mismatch." >&2; exit 65; }
+
+# node:sqlite needs Node >= 22.13
+node -e 'const [a,b]=process.versions.node.split(".").map(Number);process.exit(a>22||(a===22&&b>=13)?0:1)' \
+  || { echo "Node >= 22.13 required (found $(node -v))." >&2; exit 69; }
+
+previous=$(readlink "$current" 2>/dev/null || true)
+chown -R root:arena "$release"
+find "$release" -type d -exec chmod 0750 {} +
+find "$release" -type f -exec chmod 0640 {} +
+
+tmp="$root/.current-$sha"
+ln -sfn "releases/$sha" "$tmp" && mv -Tf "$tmp" "$current"
+systemctl restart llm-arena.service
+
+for _ in $(seq 1 30); do
+  body=$(curl -fsS --max-time 3 http://127.0.0.1:3400/api/health 2>/dev/null || true)
+  if [[ $body == *"\"sha\":\"$sha\""* ]]; then echo "LLM Arena $sha is healthy."; exit 0; fi
+  sleep 2
+done
+
+echo "Health check failed for $sha." >&2
+if [[ $previous =~ ^releases/[0-9a-f]{40}$ ]]; then
+  echo "Rolling back to $previous" >&2
+  ln -sfn "$previous" "$tmp" && mv -Tf "$tmp" "$current"
+  systemctl restart llm-arena.service
+fi
+exit 1

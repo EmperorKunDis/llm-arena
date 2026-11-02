@@ -12,9 +12,12 @@ engine runs it in a QuickJS sandbox; a Bradley-Terry leaderboard ranks the model
   EmperorKunDis/llm-arena --public --source=. --remote=origin --push`.
 - No real OpenRouter call has been made. The key once pasted into chat is COMPROMISED and must be
   rotated before Phase 0 (`npm run phase0`). Never commit or log keys.
-- Deployment target: `arena.svanda.tech` (separate from the portfolio), embedded in the portfolio
-  as an iframe tab. Portfolio sends `X-Frame-Options: SAMEORIGIN`, so the tab page there needs
-  `frame-src https://arena.svanda.tech`; the arena already sends `frame-ancestors` for svanda.tech.
+- Deployment target: `arena.svanda.tech` on the portfolio VPS, same release pattern (see
+  DEPLOY.md, ops/). The agent has no access to that VPS (keys live only in GitHub Actions) nor to
+  Cloudflare DNS — the owner does the one-time setup. Deploy workflow is gated by repo variable
+  `ARENA_DEPLOY_ENABLED=true`.
+- Embedding: the portfolio sends no CSP, so its iframe needs no frame-src change; the arena sends
+  `frame-ancestors 'self' https://svanda.tech https://www.svanda.tech`.
 
 ## Hard-won lessons
 - QuickJS stack limit must stay far below the host's native WASM stack. At 512 KB a deep

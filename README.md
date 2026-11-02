@@ -92,6 +92,8 @@ each in its own isolated process. Requires Node ≥ 22.13 (built-in `node:sqlite
 dependency-free (`node:http`); put it behind a reverse proxy. Set `LLM_ARENA_TRUST_PROXY=cloudflare`
 only if the origin is reachable exclusively through Cloudflare.
 
+Production deployment: see [DEPLOY.md](DEPLOY.md).
+
 ## Generating bots (OpenRouter)
 
 ```bash

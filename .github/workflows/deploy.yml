@@ -1,0 +1,68 @@
+name: Deploy
+# Mirrors the svanda.tech portfolio deploy: immutable release, pinned SSH host key,
+# server-side activation with health check and automatic rollback.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: arena-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: >-
+      vars.ARENA_DEPLOY_ENABLED == 'true' && (
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      VPS_HOST: ${{ vars.VPS_HOST }}
+      VPS_PORT: ${{ vars.VPS_PORT }}
+      VPS_USER: ${{ vars.VPS_USER }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Build release
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
+          npm ci
+          npm test
+          npm prune --omit=dev
+          rel="$RUNNER_TEMP/release"
+          mkdir -p "$rel"
+          cp -R package.json src web scripts ops node_modules LICENSE README.md "$rel/"
+          printf '%s\n' "$DEPLOY_SHA" > "$rel/DEPLOY_SHA"
+          tar -C "$rel" -czf "$RUNNER_TEMP/arena-$DEPLOY_SHA.tgz" .
+      - name: Configure pinned SSH identity
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_PRIVATE_KEY" && test -n "$SSH_KNOWN_HOSTS"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Upload and activate
+        run: |
+          set -euo pipefail
+          o=(-p "$VPS_PORT" -i ~/.ssh/deploy -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10)
+          dest="/var/www/llm-arena/releases/$DEPLOY_SHA"
+          ssh "${o[@]}" "$VPS_USER@$VPS_HOST" "test ! -e '$dest' && mkdir -p '$dest'"
+          ssh "${o[@]}" "$VPS_USER@$VPS_HOST" "tar -xzf - -C '$dest'" < "$RUNNER_TEMP/arena-$DEPLOY_SHA.tgz"
+          ssh "${o[@]}" "$VPS_USER@$VPS_HOST" "sudo /usr/local/sbin/llm-arena-activate '$DEPLOY_SHA'"

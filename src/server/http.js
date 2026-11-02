@@ -10,6 +10,7 @@ import { decodeRecord, leaderboard, PROVISIONAL_GAMES } from "./arena.js";
 import { generateLive } from "./service.js";
 import { quotaConfig, usage } from "./quota.js";
 import { PROMPT_VERSION } from "../generate/prompt.js";
+import { readFileSync } from "node:fs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const STATIC = { "/": resolve(ROOT, "web"), "/engine/": resolve(ROOT, "src/engine") };
@@ -21,6 +22,14 @@ const TYPES = {
   ".json": "application/json; charset=utf-8",
   ".ts": "text/plain; charset=utf-8",
 };
+
+// Release revision written by the deploy (mirrors the portfolio's /api/health).
+let DEPLOY_SHA = null;
+try {
+  DEPLOY_SHA = readFileSync(resolve(ROOT, "DEPLOY_SHA"), "utf8").trim() || null;
+} catch {
+  /* local/dev run */
+}
 
 const FRAME_ANCESTORS = "'self' https://svanda.tech https://www.svanda.tech";
 const SECURITY_HEADERS = {
@@ -108,7 +117,7 @@ export function createArenaServer({ store, client, env = process.env, onGenerate
     const url = new URL(req.url, "http://localhost");
     const p = url.pathname;
     try {
-      if (req.method === "GET" && p === "/api/health") return send(res, 200, { status: "ok" });
+      if (req.method === "GET" && p === "/api/health") return send(res, 200, { status: "ok", sha: DEPLOY_SHA });
 
       if (req.method === "GET" && p === "/api/leaderboard")
         return send(

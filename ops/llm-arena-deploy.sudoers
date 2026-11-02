@@ -1,0 +1,2 @@
+# The CI deploy user may only activate an uploaded release.
+deploy ALL=(root) NOPASSWD: /usr/local/sbin/llm-arena-activate [0-9a-f]*

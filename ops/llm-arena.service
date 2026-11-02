@@ -1,0 +1,39 @@
+[Unit]
+Description=LLM Arena (arena.svanda.tech)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=arena
+Group=arena
+WorkingDirectory=/var/www/llm-arena/current
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=3400
+Environment=LLM_ARENA_DB=/var/lib/llm-arena/arena.sqlite
+EnvironmentFile=/var/www/llm-arena/.env.production
+ExecStart=/usr/bin/env node scripts/serve.js
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+KillSignal=SIGTERM
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/llm-arena /var/log/llm-arena
+MemoryMax=1G
+TasksMax=256
+LimitNOFILE=65535
+StandardOutput=append:/var/log/llm-arena/application.log
+StandardError=append:/var/log/llm-arena/error.log
+
+[Install]
+WantedBy=multi-user.target
