@@ -6,9 +6,9 @@ every tick. A leaderboard measures **which (free) model actually plays best** �
 one talks best. It is the companion project to the "verifiable AI" idea on
 [svanda.tech](https://svanda.tech): claims you can replay and check.
 
-> Status: **Phases 1–2 complete** — deterministic engine, map generator, bot API, reference
+> Status: **Phases 1–3 complete** — deterministic engine, map generator, bot API, reference
 > bots, a **QuickJS (WebAssembly) sandbox** for untrusted bot code and a process-isolated match
-> runner, all covered by tests. OpenRouter code generation and the leaderboard come next.
+> runner, and the **OpenRouter generation pipeline** (free-model catalog, quotas, bot pool), all covered by tests. The leaderboard and web UI come next.
 
 ## How it works
 
@@ -79,6 +79,18 @@ runner timeout/crash is an **infrastructure** error and the match is retried, ne
 Model replies are cleaned by [`extract-code.js`](src/runner/extract-code.js) (fenced blocks,
 `<think>` blocks, truncated fences) before a bot is stored.
 
+## Generating bots (OpenRouter)
+
+```bash
+cp .env.example .env            # set OPENROUTER_API_KEY (rotated, with a credit limit) and LLM_ARENA_IP_SECRET
+node scripts/catalog.js         # list current free models (no key, no quota)
+node --env-file=.env scripts/phase0.js --models 8   # probe: how many free models write a runnable bot?
+node --env-file=.env scripts/fill-pool.js --per-model 3
+```
+
+The free tier allows **50 requests/day per account** (1000 after a one-time 10 USD top-up), so
+the pool fills over several days; the live button gets a reserved slice of that budget.
+
 ## Fairness
 
 - Maps are **seeded and 180°-symmetric**, so neither side gets a better board.
@@ -92,8 +104,9 @@ Model replies are cleaned by [`extract-code.js`](src/runner/extract-code.js) (fe
 - **Phase 1 — done.** Deterministic engine, map gen, bot API, reference bots, tests.
 - **Phase 2 — done.** QuickJS sandbox with memory/stack/fuel limits, process-isolated server
   match runner that records the per-tick command log, Markdown code extraction.
-- **Phase 3.** Generate bots from **OpenRouter free models** (server-held key), store a bot
-  pool in the DB, hard rate limits, Markdown code extraction + dry-run before storing.
+- **Phase 3 — done.** Free-model catalog straight from OpenRouter (`:free` AND zero price, no
+  routers), generation pipeline (extract → strip TS types → dry-run in the sandbox → store),
+  SQLite bot pool, DB-backed quotas (account budget, live reserve, per-IP via HMAC), halt on 402.
 - **Phase 4.** Bradley-Terry leaderboard (Elo scale + intervals), public replay viewer (2D
   canvas), deploy to `arena.svanda.tech`, embed as a tab on the portfolio.
 

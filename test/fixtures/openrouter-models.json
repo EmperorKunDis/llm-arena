@@ -1,0 +1,90 @@
+{
+ "_source": "https://openrouter.ai/api/v1/models (sample, 2026-11-02)",
+ "data": [
+  {
+   "id": "liquid/lfm-2.5-2.6b:free",
+   "name": "LiquidAI: LFM2.5-2.6B (free)",
+   "context_length": 65536,
+   "pricing": {
+    "prompt": "0",
+    "completion": "0"
+   },
+   "architecture": {
+    "output_modalities": [
+     "text"
+    ]
+   }
+  },
+  {
+   "id": "cohere/north-mini-code:free",
+   "name": "Cohere: North Mini Code (free)",
+   "context_length": 256000,
+   "pricing": {
+    "prompt": "0",
+    "completion": "0"
+   },
+   "architecture": {
+    "output_modalities": [
+     "text"
+    ]
+   }
+  },
+  {
+   "id": "google/gemma-4-31b-it:free",
+   "name": "Google: Gemma 4 31B (free)",
+   "context_length": 262144,
+   "pricing": {
+    "prompt": "0",
+    "completion": "0"
+   },
+   "architecture": {
+    "output_modalities": [
+     "text"
+    ]
+   }
+  },
+  {
+   "id": "google/lyria-3-pro-preview",
+   "name": "Google: Lyria 3 Pro Preview",
+   "context_length": 1048576,
+   "pricing": {
+    "prompt": "0",
+    "completion": "0"
+   },
+   "architecture": {
+    "output_modalities": [
+     "text",
+     "audio"
+    ]
+   }
+  },
+  {
+   "id": "openrouter/free",
+   "name": "Free Models Router",
+   "context_length": 200000,
+   "pricing": {
+    "prompt": "0",
+    "completion": "0"
+   },
+   "architecture": {
+    "output_modalities": [
+     "text"
+    ]
+   }
+  },
+  {
+   "id": "particle-ai/particle-1",
+   "name": "Particle AI: Particle-1",
+   "context_length": 1048576,
+   "pricing": {
+    "prompt": "0.00000005",
+    "completion": "0.0000005"
+   },
+   "architecture": {
+    "output_modalities": [
+     "text"
+    ]
+   }
+  }
+ ]
+}
