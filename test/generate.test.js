@@ -64,6 +64,7 @@ describe("OpenRouter client", () => {
     expect(sent.model).toBe("x/y:free");
     expect(sent.models).toBeUndefined();
     expect(sent.provider.allow_fallbacks).toBe(false);
+    expect(sent.max_tokens).toBe(16000);
     expect(r.provider).toBe("P");
   });
 
@@ -72,6 +73,7 @@ describe("OpenRouter client", () => {
     expect(classifyStatus(503).class).toBe("infra");
     expect(classifyStatus(402)).toEqual({ class: "stop", kind: "payment_required" });
     expect(classifyStatus(401).class).toBe("stop");
+    expect(classifyStatus(403)).toEqual({ class: "rejected", kind: "model_forbidden" }); // per-model, never halts
     expect(classifyStatus(404).class).toBe("rejected");
     const timeout = async () => {
       throw Object.assign(new Error("aborted"), { name: "AbortError" });
@@ -86,6 +88,13 @@ describe("OpenRouter client", () => {
   it("refuses to call without an API key", async () => {
     const r = await createOpenRouterClient({ fetchImpl: async () => new Response("{}") }).complete({ model: "m" });
     expect(r).toMatchObject({ ok: false, class: "stop", kind: "missing_api_key" });
+  });
+});
+
+describe("prompt", () => {
+  it("uses a single user message (no system role some providers reject)", async () => {
+    const { buildMessages } = await import("../src/generate/prompt.js");
+    expect(buildMessages().map((m) => m.role)).toEqual(["user"]);
   });
 });
 
@@ -151,7 +160,7 @@ describe("generation services", () => {
     const c = cfg();
     const first = await generateLive({ store, client, ip: "9.9.9.9", modelId: "google/gemma-4-31b-it:free", cfg: c });
     expect(first).toMatchObject({ ok: true, status: "valid" });
-    expect(store.getBot(first.botId)).toMatchObject({ provider: "TestHost", source: "live", prompt_version: "v1" });
+    expect(store.getBot(first.botId)).toMatchObject({ provider: "TestHost", source: "live", prompt_version: "v2" });
     const second = await generateLive({ store, client, ip: "9.9.9.9", modelId: "google/gemma-4-31b-it:free", cfg: c });
     expect(second).toMatchObject({ ok: false, error: "quota", scope: "live_ip" });
     expect(client.calls.length).toBe(1); // refused before calling OpenRouter

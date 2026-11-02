@@ -76,6 +76,10 @@ export async function generateBot({ modelId, client, store, source = "pool" }) {
   }
 
   const prep = await prepareBot(res.content);
+  if (prep.status === "invalid" && res.finishReason === "length") {
+    prep.errorKind = "truncated"; // the reply hit the token cap mid-code
+    prep.errorMessage = `Reply cut off at the token limit (${prep.errorMessage || "no code"})`;
+  }
   const botId = store.insertBot({
     modelId,
     modelActual: res.modelActual,

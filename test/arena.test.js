@@ -118,7 +118,7 @@ describe("arena: matchmaking, play and leaderboard", () => {
     store.syncModels([{ id: "x/crasher:free", name: "Crasher", contextLength: 9999 }]);
     store.insertBot({
       modelId: "x/crasher:free",
-      promptVersion: "v1",
+      promptVersion: "v2",
       source: "pool",
       status: "valid",
       code: "export function loop(s){ if (s.tick > 3) throw new Error('boom'); }",
@@ -127,7 +127,7 @@ describe("arena: matchmaking, play and leaderboard", () => {
       { id: "x/crasher:free", name: "Crasher", contextLength: 9999 },
       { id: "x/broken:free", name: "Broken", contextLength: 9999 },
     ]);
-    store.insertBot({ modelId: "x/broken:free", promptVersion: "v1", source: "pool", status: "invalid", errorKind: "no_code" });
+    store.insertBot({ modelId: "x/broken:free", promptVersion: "v2", source: "pool", status: "invalid", errorKind: "no_code" });
     await runPending(store, { runner: inProcess });
     const board = leaderboard(store);
     const crasher = board.find((r) => r.id === "x/crasher:free");

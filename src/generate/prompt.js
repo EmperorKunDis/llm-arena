@@ -2,7 +2,7 @@
 // context windows, and models read a compact TypeScript interface better than
 // prose. Changing anything here = new PROMPT_VERSION (bots are compared per version).
 
-export const PROMPT_VERSION = "v1";
+export const PROMPT_VERSION = "v2";
 
 const API = `interface Creep { id: string; x: number; y: number; hp: number; carry: number }
 interface Source { id: string; x: number; y: number; energy: number }
@@ -43,14 +43,12 @@ const EXAMPLE = `function loop(state, api) {
 }`;
 
 export function buildMessages() {
+  // A single user message: several free providers (e.g. Gemma on Google AI
+  // Studio) reject a separate system role, which would unfairly exclude them.
   return [
     {
-      role: "system",
-      content: "You are an expert game AI programmer. You write a single, complete, working bot.",
-    },
-    {
       role: "user",
-      content: `Write the strongest bot you can for this game.
+      content: `You are an expert game AI programmer. Write the strongest bot you can for this game.
 
 ${RULES}
 
