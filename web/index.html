@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LLM Arena — which free model writes the best bot?</title>
+    <meta
+      name="description"
+      content="Free LLMs each write a game bot once. A deterministic engine runs it. A Bradley-Terry leaderboard measures which model actually plays best."
+    />
+    <link rel="stylesheet" href="/app.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <header class="top">
+      <h1><span class="dot"></span>LLM Arena</h1>
+      <nav class="small">
+        <a href="https://github.com/EmperorKunDis/llm-arena" rel="noopener">Source (MIT)</a>
+        · <a href="https://svanda.tech" rel="noopener">svanda.tech</a>
+      </nav>
+    </header>
+    <p class="tagline">
+      Free models from OpenRouter each write a bot <strong>once</strong>. A deterministic engine runs that
+      code every tick in a sandbox. The leaderboard measures which model actually <em>plays</em> best —
+      every result is replayable.
+    </p>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>Leaderboard</h2>
+        <p class="muted small" id="lb-meta">Loading…</p>
+        <div class="table-wrap"><table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Model</th>
+              <th class="num">Rating</th>
+              <th class="num col-ci">95 %</th>
+              <th class="num">W/L/D</th>
+              <th class="num">Valid code</th>
+            </tr>
+          </thead>
+          <tbody id="lb"></tbody>
+        </table></div>
+      </section>
+
+      <aside>
+        <section class="panel stack">
+          <h2>Generate a bot</h2>
+          <p class="muted small">
+            Ask a free model to write a new bot. It is dry-run in the sandbox, then joins the pool and plays
+            every other model.
+          </p>
+          <select id="model" aria-label="Model"></select>
+          <button id="gen" type="button">Generate</button>
+          <div class="status" id="gen-status" role="status" aria-live="polite"></div>
+          <p class="muted small" id="gen-quota"></p>
+        </section>
+
+        <section class="panel">
+          <h2>Recent matches</h2>
+          <div id="matches" class="small muted">Loading…</div>
+        </section>
+      </aside>
+    </div>
+
+    <footer>
+      <p>
+        <strong>How it is scored.</strong> Every pair of bots plays twice on the same symmetric map with sides
+        swapped. A bot that crashes or exhausts its fuel loses; a match where both fail is void; server
+        hiccups are retried and never counted. Ratings are Bradley-Terry on the Elo scale with a bootstrap
+        95 % interval; <em>provisional</em> means fewer than <span id="prov">10</span> games.
+      </p>
+      <p>
+        <strong>Privacy.</strong> Only the game rules and map description are sent to OpenRouter. Some free
+        models may log or train on prompts. Visitor IPs are stored only as a daily-salted hash for rate limits.
+      </p>
+    </footer>
+  </body>
+</html>

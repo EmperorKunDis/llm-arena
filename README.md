@@ -6,9 +6,9 @@ every tick. A leaderboard measures **which (free) model actually plays best** �
 one talks best. It is the companion project to the "verifiable AI" idea on
 [svanda.tech](https://svanda.tech): claims you can replay and check.
 
-> Status: **Phases 1–3 complete** — deterministic engine, map generator, bot API, reference
+> Status: **Phases 1–4 complete** — deterministic engine, map generator, bot API, reference
 > bots, a **QuickJS (WebAssembly) sandbox** for untrusted bot code and a process-isolated match
-> runner, and the **OpenRouter generation pipeline** (free-model catalog, quotas, bot pool), all covered by tests. The leaderboard and web UI come next.
+> runner, and the **OpenRouter generation pipeline** (free-model catalog, quotas, bot pool), a Bradley-Terry **leaderboard** and a **web UI with an in-browser replay viewer** — 69 tests.
 
 ## How it works
 
@@ -79,6 +79,19 @@ runner timeout/crash is an **infrastructure** error and the match is retried, ne
 Model replies are cleaned by [`extract-code.js`](src/runner/extract-code.js) (fenced blocks,
 `<think>` blocks, truncated fences) before a bot is stored.
 
+## Run the arena
+
+```bash
+npm install
+npm run matches      # seed reference bots, play all pending matches, print the leaderboard
+npm start            # http://127.0.0.1:3400 — leaderboard, replays, live generation (if configured)
+```
+
+`npm start` runs the HTTP server and a background worker that keeps playing pending matches,
+each in its own isolated process. Requires Node ≥ 22.13 (built-in `node:sqlite`). The server is
+dependency-free (`node:http`); put it behind a reverse proxy. Set `LLM_ARENA_TRUST_PROXY=cloudflare`
+only if the origin is reachable exclusively through Cloudflare.
+
 ## Generating bots (OpenRouter)
 
 ```bash
@@ -107,8 +120,12 @@ the pool fills over several days; the live button gets a reserved slice of that 
 - **Phase 3 — done.** Free-model catalog straight from OpenRouter (`:free` AND zero price, no
   routers), generation pipeline (extract → strip TS types → dry-run in the sandbox → store),
   SQLite bot pool, DB-backed quotas (account budget, live reserve, per-IP via HMAC), halt on 402.
-- **Phase 4.** Bradley-Terry leaderboard (Elo scale + intervals), public replay viewer (2D
-  canvas), deploy to `arena.svanda.tech`, embed as a tab on the portfolio.
+- **Phase 4 — done.** Matchmaking (every pair twice, sides swapped), isolated match worker,
+  Bradley-Terry leaderboard with bootstrap intervals and reference bots, dependency-free HTTP
+  server with strict CSP, leaderboard page, bot viewer and a 2D replay viewer that re-simulates
+  matches in the browser with the same engine.
+- **Next.** Deploy to `arena.svanda.tech`, embed as a tab on svanda.tech, run Phase 0 with a real
+  key, tune the prompt from what the models actually write.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) to get involved.
 

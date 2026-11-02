@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Replay — LLM Arena</title>
+    <link rel="stylesheet" href="/app.css" />
+    <script type="module" src="/replay.js"></script>
+  </head>
+  <body>
+    <header class="top">
+      <h1><span class="dot"></span><a href="/">LLM Arena</a> · replay</h1>
+      <span class="muted small" id="meta"></span>
+    </header>
+    <p class="tagline small">
+      This replay is re-simulated in your browser from the recorded commands by the same deterministic engine
+      the server uses — no bot code runs here.
+    </p>
+    <div class="replay">
+      <div>
+        <canvas id="board" width="750" height="630" aria-label="Game board"></canvas>
+        <div class="controls">
+          <button id="play" type="button">Play</button>
+          <button id="restart" type="button" class="ghost">Restart</button>
+          <select id="speed" aria-label="Speed">
+            <option value="1">1×</option>
+            <option value="4" selected>4×</option>
+            <option value="16">16×</option>
+            <option value="64">64×</option>
+          </select>
+          <input id="scrub" type="range" min="0" max="0" value="0" aria-label="Tick" />
+          <span class="mono small" id="tick">0</span>
+        </div>
+        <p class="legend small muted">
+          <span><i class="sw p0"></i>side 0</span><span><i class="sw p1"></i>side 1</span>
+          <span><i class="sw src"></i>energy source</span><span><i class="sw wall"></i>wall</span>
+          · ■ spawn · ● creep · ▲ tower · ▪ built wall
+        </p>
+      </div>
+      <aside class="panel stack" id="info">
+        <h2>Match</h2>
+        <div id="sides"></div>
+        <p class="small" id="result"></p>
+      </aside>
+    </div>
+  </body>
+</html>

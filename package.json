@@ -5,9 +5,14 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "start": "node --env-file-if-exists=.env scripts/serve.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "demo": "node src/runner/demo.js"
+    "demo": "node src/runner/demo.js",
+    "catalog": "node --env-file-if-exists=.env scripts/catalog.js",
+    "matches": "node --env-file-if-exists=.env scripts/run-matches.js",
+    "phase0": "node --env-file-if-exists=.env scripts/phase0.js",
+    "fill-pool": "node --env-file-if-exists=.env scripts/fill-pool.js"
   },
   "exports": {
     "./engine": "./src/engine/engine.js",
@@ -24,5 +29,8 @@
   "dependencies": {
     "quickjs-emscripten": "0.32.0",
     "sucrase": "3.35.1"
+  },
+  "engines": {
+    "node": ">=22.13"
   }
 }
