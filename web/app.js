@@ -71,20 +71,31 @@ async function loadMatches() {
 
 async function loadModels() {
   const { ok, body } = await getJson("models");
-  const sel = $("model");
+  const selA = $("modelA");
+  const selB = $("modelB");
   const btn = $("gen");
-  sel.replaceChildren();
   if (!ok) return;
-  for (const m of body.models) sel.append(el("option", { value: m.id, text: short(m.id) }));
+  const keepA = selA.value;
+  const keepB = selB.value;
+  for (const sel of [selA, selB]) {
+    sel.replaceChildren();
+    for (const m of body.models) sel.append(el("option", { value: m.id, text: short(m.id) }));
+  }
+  if (body.models.length > 1) {
+    selA.value = keepA || body.models[0].id;
+    selB.value = keepB || body.models[1].id;
+  }
+  const sel = selA;
   const live = body.live;
   btn.disabled = STATIC || !live.enabled || !body.models.length;
   if (STATIC) {
     sel.disabled = true;
+    selB.disabled = true;
     $("gen-quota").textContent = live.note || "New bots are generated automatically several times a day within the free OpenRouter quota.";
     return;
   }
   $("gen-quota").textContent = live.enabled
-    ? `Limit ${live.perIpDaily}/day per visitor · ${live.usedToday}/${live.globalDaily} used today site-wide`
+    ? `Limit ${live.perIpDaily} duel/day per visitor · a duel uses 2 of the ${live.globalDaily} daily site-wide requests (${live.usedToday} used)`
     : "Live generation is currently off; the leaderboard keeps playing the stored bots.";
 }
 
@@ -116,51 +127,124 @@ function showResult(status, r) {
   status.textContent = `OpenRouter did not deliver a reply (${r.kind || "no response"}). This does not count against the model.`;
 }
 
+function duelSummary(r, models) {
+  if (!r) return "";
+  const A = short(models[0]);
+  const B = short(models[1]);
+  if (r.reason === "both_failed") return `Neither ${A} nor ${B} produced runnable code — void duel.`;
+  if (r.reason === "opponent_code_failed") {
+    const loser = r.winner === 0 ? 1 : 0;
+    const s = r.sides[loser];
+    return `${short(models[r.winner])} wins — ${short(models[loser])}'s code failed (${s.kind || s.outcome}).`;
+  }
+  const pts = `${r.points[0]} : ${r.points[1]}`;
+  return r.winner === null ? `Draw ${pts}` : `${short(models[r.winner])} wins ${r.winner === 0 ? pts : `${r.points[1]} : ${r.points[0]}`}`;
+}
+
 async function generate() {
   const btn = $("gen");
   const status = $("gen-status");
+  const modelA = $("modelA").value;
+  const modelB = $("modelB").value;
+  if (modelA === modelB) {
+    status.className = "status err";
+    return (status.textContent = "Pick two different models.");
+  }
   btn.disabled = true;
   status.className = "status";
-  status.textContent = "Starting…";
-  const start = await getJson("generate", {
+  status.textContent = "Starting the duel…";
+  const start = await getJson("duel", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ modelId: $("model").value }),
+    body: JSON.stringify({ modelA, modelB }),
   });
-  if (start.status !== 202 || !start.body.jobId) {
+  if (start.status !== 202 || !start.body.duelId) {
     status.className = "status err";
     status.textContent =
-      FAILURES[start.body.error] ||
+      { ...FAILURES, pick_two_models: "Pick two different models." }[start.body.error] ||
       (start.status >= 500 ? `Server error (${start.status}). Please try again later.` : "Request failed.");
     return loadModels();
   }
-  const id = start.body.jobId;
-  for (let i = 0; i < 120; i++) {
+  const id = start.body.duelId;
+  status.textContent = "Both models are writing — watch them live above.";
+  for (let i = 0; i < 160; i++) {
     await sleep(3000);
-    const { ok, body } = await getJson(`jobs/${id}`);
-    if (!ok) continue; // transient; keep polling
+    const { ok, body } = await getJson(`duels/${id}`);
+    if (!ok) continue;
+    if (body.state === "fighting") status.textContent = "Both bots are written — the match is being played…";
     if (body.state === "done") {
-      showResult(status, body);
-      await Promise.all([loadModels(), loadLeaderboard()]);
+      const r = body.result;
+      status.className = `status ${r.reason === "both_failed" ? "err" : "ok"}`;
+      status.replaceChildren(document.createTextNode(duelSummary(r, body.models) + " "));
+      if (r.matches?.length) {
+        status.append(el("a", { href: `replay.html?id=${r.matches[0]}`, text: "Watch replay ▸" }));
+        loadFeatured(r.matches[0]);
+      }
+      await Promise.all([loadModels(), loadLeaderboard(), loadMatches()]);
       return;
     }
-    status.textContent = `${short(body.model)} is writing its bot… ${body.elapsedSeconds}s (free models can take 1–3 minutes)`;
   }
   status.className = "status err";
-  status.textContent = "Still running after 6 minutes — check the leaderboard later.";
+  status.textContent = "Still running after 8 minutes — check the leaderboard later.";
   loadModels();
 }
 
 // ---- live OpenRouter activity ------------------------------------------------
 const liveBoxes = new Map(); // jobId -> { root, code, think }
+function streamColumn(j, model, side) {
+  const col = el("div", { class: "duel-side" });
+  col.append(
+    el("div", { class: `mono small p${side}`, text: short(model) }),
+    el("div", { class: "small muted", text: j ? `${j.elapsedSeconds}s · ${j.contentLength} chars code${j.reasoningLength ? ` · ${j.reasoningLength} thinking` : ""}` : "starting…" }),
+  );
+  if (j && !j.contentLength && j.reasoningTail) col.append(el("div", { class: "think small", text: `thinking… ${j.reasoningTail.slice(-260)}` }));
+  if (j && j.state === "done") col.append(el("div", { class: `small ${j.status === "valid" ? "ok-text" : "err-text"}`, text: j.status ? `bot ${j.status}${j.kind ? ` (${j.kind})` : ""}` : `${j.outcome}: ${j.kind}` }));
+  const pre = el("pre", { class: "code stream" });
+  pre.textContent = j?.content || "";
+  pre.hidden = !pre.textContent;
+  col.append(pre);
+  return col;
+}
+
+const duelBoxes = new Map();
+function renderDuels(list) {
+  const box = $("duels-live");
+  for (const [id, b] of duelBoxes) if (!list.find((d) => d.duelId === id)) (b.remove(), duelBoxes.delete(id));
+  for (const d of list) {
+    let card = duelBoxes.get(d.duelId);
+    const scrolls = card ? [...card.querySelectorAll("pre")].map((p) => [p.scrollTop, p.scrollTop + p.clientHeight >= p.scrollHeight - 20]) : [];
+    const fresh = el("div", { class: "duel-card" }, [
+      el("div", { class: "row small" }, [
+        el("span", {}, [
+          el("span", { class: "p0 mono", text: short(d.models[0]) }),
+          el("span", { class: "muted", text: "  vs  " }),
+          el("span", { class: "p1 mono", text: short(d.models[1]) }),
+        ]),
+        el("span", { class: `badge ${d.source === "live" ? "agent" : "prov"}`, text: `${d.source === "live" ? "visitor duel" : "auto duel"} · ${d.state} · ${d.elapsedSeconds}s` }),
+      ]),
+      el("div", { class: "duel-cols" }, [streamColumn(d.sides[0], d.models[0], 0), streamColumn(d.sides[1], d.models[1], 1)]),
+    ]);
+    if (card) card.replaceWith(fresh);
+    else box.append(fresh);
+    duelBoxes.set(d.duelId, fresh);
+    [...fresh.querySelectorAll("pre")].forEach((p, i) => {
+      const [top, atBottom] = scrolls[i] || [0, true];
+      p.scrollTop = atBottom ? p.scrollHeight : top;
+    });
+  }
+}
+
 function renderActivity(act) {
   const box = $("live");
-  const running = act.running || [];
-  $("live-count").textContent = running.length ? `${running.length} running` : "idle";
-  $("live-count").classList.toggle("on", running.length > 0);
+  renderDuels(act.duels || []);
+  const running = (act.running || []).filter((j) => !String(j.source).startsWith("duel-"));
+  const n = running.length + (act.duels || []).length;
+  $("live-count").textContent = n ? `${(act.duels || []).length ? `${act.duels.length} duel live` : `${running.length} running`}` : "idle";
+  $("live-count").classList.toggle("on", n > 0);
   for (const [id, b] of liveBoxes) if (!running.find((j) => j.jobId === id)) (b.root.remove(), liveBoxes.delete(id));
-  if (!running.length && !box.children.length)
-    box.replaceChildren(el("p", { class: "small muted", text: "No model is writing right now. Press Generate, or wait for the next pool run." }));
+  if (!running.length && !(act.duels || []).length && !box.children.length)
+    box.replaceChildren(el("p", { class: "small muted", text: "No duel running right now. Start one below, or wait for the next automatic duel." }));
+  if ((act.duels || []).length && box.firstChild && box.firstChild.tagName === "P") box.replaceChildren();
   for (const j of running) {
     let b = liveBoxes.get(j.jobId);
     if (!b) {
@@ -184,15 +268,15 @@ function renderActivity(act) {
     b.code.hidden = !b.code.textContent;
     if (atBottom) b.code.scrollTop = b.code.scrollHeight;
   }
-  const recent = (act.recent || []).slice(0, 5);
+  const recentDuels = (act.recentDuels || []).slice(0, 6);
   $("recent-gen").replaceChildren(
-    ...(recent.length ? [el("div", { class: "muted", text: "Recently finished" })] : []),
-    ...recent.map((j) =>
+    ...(recentDuels.length ? [el("div", { class: "muted", text: "Recent duels" })] : []),
+    ...recentDuels.map((d) =>
       el("div", { class: "match" }, [
-        el("span", { class: "mono", text: short(j.model) }),
-        j.botId
-          ? el("a", { href: `bot.html?id=${j.botId}`, text: `${j.status}${j.kind ? ` (${j.kind})` : ""} · ${j.elapsedSeconds}s ▸` })
-          : el("span", { class: "muted", text: `${j.outcome}: ${j.kind} · ${j.elapsedSeconds}s` }),
+        el("span", { text: duelSummary(d.result, d.models) }),
+        d.result?.matches?.length
+          ? el("a", { href: `replay.html?id=${d.result.matches[0]}`, text: "replay ▸" })
+          : el("span", { class: "muted", text: `${d.elapsedSeconds}s` }),
       ]),
     ),
   );
@@ -204,11 +288,20 @@ async function loadActivity() {
 }
 
 // ---- featured match (latest decisive match, autoplay) -------------------------
-async function loadFeatured() {
-  const { ok, body } = await getJson("matches?limit=30");
-  if (!ok || !body.matches.length) return ($("featured-title").textContent = "No matches yet.");
-  const pick = body.matches.find((m) => m.winner !== null && m.reason !== "model_error") || body.matches[0];
-  const d = await getJson(`matches/${pick.id}`);
+let featuredPlayer = null;
+async function loadFeatured(matchId) {
+  let id = matchId;
+  if (!id) {
+    const act = STATIC ? null : await getJson("activity");
+    const duelMatch = act?.ok && (act.body.recentDuels || []).find((d) => d.result?.matches?.length);
+    if (duelMatch) id = duelMatch.result.matches[0];
+  }
+  if (!id) {
+    const { ok, body } = await getJson("matches?limit=30");
+    if (!ok || !body.matches.length) return ($("featured-title").textContent = "No matches yet.");
+    id = (body.matches.find((m) => m.winner !== null && m.reason !== "model_error") || body.matches[0]).id;
+  }
+  const d = await getJson(`matches/${id}`);
   if (!d.ok) return;
   const m = d.body;
   $("featured-link").href = `replay.html?id=${m.id}`;
@@ -217,12 +310,15 @@ async function loadFeatured() {
     el("span", { class: "muted", text: " vs " }),
     el("span", { class: "p1 mono", text: short(m.bots[1].model) }),
   );
+  if (featuredPlayer) featuredPlayer.toggle(false), (featuredPlayer.dead = true);
   const fp = new ReplayPlayer(m.record, new Board($("featured")), (p) => {
+    if (p.dead) return;
     $("featured-tick").textContent = `tick ${p.state.tick} · ${p.scores()[0]} : ${p.scores()[1]}`;
   });
   fp.speed = 6;
   fp.loop = true;
   fp.toggle(true);
+  featuredPlayer = fp;
 }
 
 $("gen").addEventListener("click", generate);

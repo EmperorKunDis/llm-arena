@@ -28,21 +28,22 @@ export function hashIp(ip, secret, day = utcDay()) {
 }
 
 /**
- * Atomically consume one unit from every bucket, or from none.
- * buckets: [{ scope, key, limit }]. Returns { ok:true } or { ok:false, scope }.
+ * Atomically consume from every bucket, or from none.
+ * buckets: [{ scope, key, limit, amount = 1 }]. Returns { ok:true } or { ok:false, scope }.
  */
 export function consume(store, buckets, day = utcDay()) {
   return store.tx(() => {
     const get = store.db.prepare("SELECT count FROM quota WHERE day = ? AND scope = ? AND key = ?");
     for (const b of buckets) {
       const used = get.get(day, b.scope, b.key)?.count ?? 0;
-      if (b.limit <= 0 || used >= b.limit) return { ok: false, scope: b.scope, used, limit: b.limit };
+      const amount = b.amount ?? 1;
+      if (b.limit <= 0 || used + amount > b.limit) return { ok: false, scope: b.scope, used, limit: b.limit };
     }
     const inc = store.db.prepare(
-      `INSERT INTO quota (day, scope, key, count) VALUES (?, ?, ?, 1)
-       ON CONFLICT(day, scope, key) DO UPDATE SET count = count + 1`,
+      `INSERT INTO quota (day, scope, key, count) VALUES (?, ?, ?, ?)
+       ON CONFLICT(day, scope, key) DO UPDATE SET count = count + excluded.count`,
     );
-    for (const b of buckets) inc.run(day, b.scope, b.key);
+    for (const b of buckets) inc.run(day, b.scope, b.key, b.amount ?? 1);
     return { ok: true };
   });
 }
@@ -54,6 +55,14 @@ export const liveBuckets = (cfg, ipHash) => [
   { scope: "live_global", key: "*", limit: cfg.liveGlobal },
   { scope: "account", key: "*", limit: cfg.accountDaily },
 ];
+
+// A duel = two model calls. Per-IP limit counts duels; the shared budgets count requests.
+export const duelBuckets = (cfg, ipHash) => [
+  { scope: "live_ip", key: ipHash, limit: cfg.livePerIp, amount: 1 },
+  { scope: "live_global", key: "*", limit: cfg.liveGlobal, amount: 2 },
+  { scope: "account", key: "*", limit: cfg.accountDaily, amount: 2 },
+];
+export const poolDuelBuckets = (cfg) => [{ scope: "account", key: "*", limit: cfg.poolDaily, amount: 2 }];
 
 export function usage(store, day = utcDay()) {
   const rows = store.db.prepare("SELECT scope, SUM(count) AS n FROM quota WHERE day = ? GROUP BY scope").all(day);

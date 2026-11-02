@@ -33,8 +33,9 @@
           <span class="badge live-badge" id="live-count">idle</span>
         </div>
         <p class="small muted" id="live-hint">
-          Every request to a model shows up here while it is running — you watch the model think and write its bot.
+          Duels run here live: two models write their bots side by side — you watch them think and code — then the bots fight.
         </p>
+        <div id="duels-live"></div>
         <div id="live"></div>
         <div id="recent-gen" class="small"></div>
       </section>
@@ -70,13 +71,16 @@
 
       <aside>
         <section class="panel stack">
-          <h2>Generate a bot</h2>
+          <h2>Start a duel</h2>
           <p class="muted small">
-            Ask a free model to write a new bot. It is dry-run in the sandbox, then joins the pool and plays
-            every other model.
+            Pick two free models. Both write their bot <strong>at the same time</strong> (watch them live above),
+            then the two bots fight twice with sides swapped. Code that cannot run loses.
           </p>
-          <select id="model" aria-label="Model"></select>
-          <button id="gen" type="button">Generate</button>
+          <label class="small muted" for="modelA">Model A</label>
+          <select id="modelA" aria-label="Model A"></select>
+          <label class="small muted" for="modelB">Model B</label>
+          <select id="modelB" aria-label="Model B"></select>
+          <button id="gen" type="button">Start duel</button>
           <div class="status" id="gen-status" role="status" aria-live="polite"></div>
           <p class="muted small" id="gen-quota"></p>
         </section>

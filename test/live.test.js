@@ -129,7 +129,7 @@ describe("HTTP: activity, opponents, submit, worker CSP", () => {
     await new Promise((r) => server.listen(0, "127.0.0.1", r));
     const base = `http://127.0.0.1:${server.address().port}`;
     try {
-      expect(await (await fetch(base + "/api/activity")).json()).toEqual({ running: [], recent: [] });
+      expect(await (await fetch(base + "/api/activity")).json()).toEqual({ running: [], recent: [], duels: [], recentDuels: [] });
       const opp = await (await fetch(base + "/api/opponents")).json();
       expect(opp.opponents.length).toBe(4);
       const sub = await fetch(base + "/api/submit", {

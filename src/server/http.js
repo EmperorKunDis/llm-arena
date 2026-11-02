@@ -12,6 +12,8 @@ import { generateBot } from "../generate/pipeline.js";
 import { createJobs } from "./jobs.js";
 import { submitUserBot } from "./submit.js";
 import { opponents } from "./arena.js";
+import { createDuels, runDuel, duelView } from "./duel.js";
+import { consume, hashIp, duelBuckets } from "./quota.js";
 import { quotaConfig, usage } from "./quota.js";
 import { readFileSync } from "node:fs";
 
@@ -107,7 +109,15 @@ async function serveStatic(res, pathname) {
   return send(res, 404, { error: "not_found" });
 }
 
-export function createArenaServer({ store, client, env = process.env, onGenerated = () => {}, jobs = createJobs() }) {
+export function createArenaServer({
+  store,
+  client,
+  env = process.env,
+  onGenerated = () => {},
+  jobs = createJobs(),
+  duels = createDuels(),
+  runner,
+}) {
   // Live generation runs as a background job (free models can write for 2+
   // minutes, longer than Cloudflare's 100 s proxy timeout); the browser polls and
   // sees the streamed text. The same registry shows background pool filling.
@@ -182,8 +192,53 @@ export function createArenaServer({ store, client, env = process.env, onGenerate
         return send(res, 200, jobs.view(job, { since }), { "Cache-Control": "no-store" });
       }
 
-      if (req.method === "GET" && p === "/api/activity")
-        return send(res, 200, jobs.activity(), { "Cache-Control": "no-store" });
+      if (req.method === "GET" && p === "/api/activity") {
+        const all = duels.list();
+        return send(
+          res,
+          200,
+          {
+            ...jobs.activity(),
+            duels: all.filter((d) => d.state !== "done").map((d) => duelView(d, jobs, { tail: 4000 })),
+            recentDuels: all
+              .filter((d) => d.state === "done")
+              .slice(0, 8)
+              .map((d) => ({ duelId: d.id, source: d.source, models: d.models, result: d.result, elapsedSeconds: duelView(d, jobs).elapsedSeconds })),
+          },
+          { "Cache-Control": "no-store" },
+        );
+      }
+
+      if (req.method === "POST" && p === "/api/duel") {
+        const body = await readJson(req);
+        const { modelA, modelB } = body;
+        if (typeof modelA !== "string" || typeof modelB !== "string" || modelA === modelB)
+          return send(res, 400, { error: "pick_two_models" });
+        if (!env.OPENROUTER_API_KEY) return send(res, 503, { error: "not_configured" });
+        if (store.getSetting("halt")) return send(res, 503, { error: "halted" });
+        const active = new Set(store.listModels({ activeOnly: true }).map((m) => m.id));
+        if (!active.has(modelA) || !active.has(modelB)) return send(res, 400, { error: "unknown_model" });
+        const cfg = quotaConfig(env);
+        let ipHash;
+        try {
+          ipHash = hashIp(clientIp(req, env), cfg.ipSecret);
+        } catch {
+          return send(res, 503, { error: "not_configured" });
+        }
+        const q = consume(store, duelBuckets(cfg, ipHash));
+        if (!q.ok) return send(res, 429, { error: "quota", scope: q.scope });
+        const { duel, done } = await runDuel({ store, client, jobs, duels, modelA, modelB, source: "live", runner });
+        done.then(() => onGenerated()).catch(() => {});
+        return send(res, 202, duelView(duel, jobs));
+      }
+
+      mm = p.match(/^\/api\/duels\/([0-9a-f-]{36})$/);
+      if (req.method === "GET" && mm) {
+        const d = duels.get(mm[1]);
+        if (!d) return send(res, 404, { error: "not_found" });
+        const since = [Number(url.searchParams.get("since0")) || 0, Number(url.searchParams.get("since1")) || 0];
+        return send(res, 200, duelView(d, jobs, { since }), { "Cache-Control": "no-store" });
+      }
 
       if (req.method === "GET" && p === "/api/opponents")
         return send(res, 200, { opponents: opponents(store) }, { "Cache-Control": "public, max-age=60" });

@@ -113,3 +113,11 @@ details summary { cursor: pointer; color: var(--accent); }
 .grid > .panel + .panel { margin-top: 0; }
 pre.code.stream:empty { display: none; }
 .controls select { width: auto; flex: none; }
+
+.duel-card { border: 1px solid var(--line); border-radius: 10px; padding: 10px; margin-top: 10px; }
+.duel-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+@media (max-width: 700px) { .duel-cols { grid-template-columns: 1fr; } }
+.duel-side { min-width: 0; }
+.duel-side pre.code.stream { max-height: 300px; }
+.ok-text { color: var(--accent); }
+.err-text { color: var(--p1); }
