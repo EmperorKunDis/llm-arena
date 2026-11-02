@@ -1,3 +1,5 @@
+import { getJson, STATIC } from "./data.js";
+
 // Leaderboard page. All untrusted strings (model ids, errors) go through
 // textContent, never innerHTML.
 
@@ -14,14 +16,9 @@ const el = (tag, props = {}, children = []) => {
 };
 const short = (id) => (id || "?").replace(/:free$/, "");
 
-async function getJson(url, init) {
-  const res = await fetch(url, init);
-  const body = await res.json().catch(() => ({}));
-  return { ok: res.ok, status: res.status, body };
-}
 
 async function loadLeaderboard() {
-  const { ok, body } = await getJson("/api/leaderboard");
+  const { ok, body } = await getJson("leaderboard");
   const tbody = $("lb");
   tbody.replaceChildren();
   if (!ok) return ($("lb-meta").textContent = "Leaderboard unavailable.");
@@ -53,32 +50,37 @@ async function loadLeaderboard() {
 }
 
 async function loadMatches() {
-  const { ok, body } = await getJson("/api/matches?limit=15");
+  const { ok, body } = await getJson("matches?limit=15");
   const box = $("matches");
   box.replaceChildren();
   if (!ok || !body.matches.length) return (box.textContent = "No matches yet.");
-  for (const m of body.matches) {
+  for (const m of body.matches.slice(0, 15)) {
     const side = (i) =>
       el("span", { class: `p${i}${m.winner === i ? " win" : ""}`, text: short(m[`bot${i}`].model) });
     const result = m.winner === null ? "draw" : m.reason === "model_error" ? "crash" : m.reason.replace("_", " ");
     box.append(
       el("div", { class: "match" }, [
         el("span", {}, [side(0), el("span", { class: "muted", text: " vs " }), side(1)]),
-        el("a", { href: `/replay.html?id=${m.id}`, text: `${result} ▸` }),
+        el("a", { href: `replay.html?id=${m.id}`, text: `${result} ▸` }),
       ]),
     );
   }
 }
 
 async function loadModels() {
-  const { ok, body } = await getJson("/api/models");
+  const { ok, body } = await getJson("models");
   const sel = $("model");
   const btn = $("gen");
   sel.replaceChildren();
   if (!ok) return;
   for (const m of body.models) sel.append(el("option", { value: m.id, text: short(m.id) }));
   const live = body.live;
-  btn.disabled = !live.enabled || !body.models.length;
+  btn.disabled = STATIC || !live.enabled || !body.models.length;
+  if (STATIC) {
+    sel.disabled = true;
+    $("gen-quota").textContent = live.note || "New bots are generated automatically several times a day within the free OpenRouter quota.";
+    return;
+  }
   $("gen-quota").textContent = live.enabled
     ? `Limit ${live.perIpDaily}/day per visitor · ${live.usedToday}/${live.globalDaily} used today site-wide`
     : "Live generation is currently off; the leaderboard keeps playing the stored bots.";
@@ -90,7 +92,7 @@ async function generate() {
   btn.disabled = true;
   status.className = "status";
   status.textContent = "Asking the model… (free models can take up to a minute)";
-  const { status: code, body } = await getJson("/api/generate", {
+  const { status: code, body } = await getJson("generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ modelId: $("model").value }),
@@ -101,7 +103,7 @@ async function generate() {
       document.createTextNode(
         body.status === "valid" ? "Bot is valid and joins the arena. " : `The model's code failed (${body.kind}). `,
       ),
-      el("a", { href: `/bot.html?id=${body.botId}`, text: "View code" }),
+      el("a", { href: `bot.html?id=${body.botId}`, text: "View code" }),
     );
   } else {
     status.className = "status err";

@@ -1,11 +1,12 @@
+import { getJson } from "./data.js";
+
 // Shows a stored bot. Model-written code is untrusted text: textContent only.
 const $ = (id) => document.getElementById(id);
 const id = Number(new URLSearchParams(location.search).get("id"));
-const res = await fetch(`/api/bots/${id}`);
-if (!res.ok) {
+const { ok, body: b } = await getJson(`bots/${id}`);
+if (!ok) {
   $("title").textContent = "Bot not found.";
 } else {
-  const b = await res.json();
   $("title").textContent = `${b.model.replace(/:free$/, "")} — bot #${b.id}`;
   $("meta").textContent = [
     b.status === "valid" ? "valid" : "invalid",

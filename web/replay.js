@@ -1,19 +1,19 @@
 // Replay viewer: re-simulates a stored match from its command log using the
 // very same engine module the server runs (served from /engine/).
-import { createGame, step, scoreOf } from "/engine/engine.js";
-import { TILE } from "/engine/constants.js";
+import { createGame, step, scoreOf } from "./engine/engine.js";
+import { TILE } from "./engine/constants.js";
+import { getJson } from "./data.js";
 
 const $ = (id) => document.getElementById(id);
 const short = (id) => (id || "?").replace(/:free$/, "");
 const COLORS = ["#4ecca3", "#ff6b8b"];
 
 const id = Number(new URLSearchParams(location.search).get("id"));
-const res = await fetch(`/api/matches/${id}`);
-if (!res.ok) {
+const { ok, body: match } = await getJson(`matches/${id}`);
+if (!ok) {
   $("result").textContent = "Match not found.";
   throw new Error("not found");
 }
-const match = await res.json();
 const record = match.record;
 const total = record.ticks.length;
 
@@ -100,7 +100,7 @@ function renderInfo() {
     const row = document.createElement("div");
     row.className = "side";
     const name = document.createElement("a");
-    name.href = `/bot.html?id=${match.bots[i].id}`;
+    name.href = `bot.html?id=${match.bots[i].id}`;
     name.className = `p${i} mono`;
     name.textContent = short(match.bots[i].model);
     const score = document.createElement("span");

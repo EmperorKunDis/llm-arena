@@ -6,10 +6,9 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { decodeRecord, leaderboard, PROVISIONAL_GAMES } from "./arena.js";
+import { leaderboardView, matchesView, matchDetailView, publicBot } from "./views.js";
 import { generateLive } from "./service.js";
 import { quotaConfig, usage } from "./quota.js";
-import { PROMPT_VERSION } from "../generate/prompt.js";
 import { readFileSync } from "node:fs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -97,21 +96,6 @@ async function serveStatic(res, pathname) {
   return send(res, 404, { error: "not_found" });
 }
 
-const publicBot = (b, withCode = false) =>
-  b && {
-    id: b.id,
-    model: b.model_id,
-    modelActual: b.model_actual,
-    provider: b.provider,
-    promptVersion: b.prompt_version,
-    source: b.source,
-    status: b.status,
-    errorKind: b.error_kind,
-    normalized: b.normalized,
-    createdAt: b.created_at,
-    ...(withCode ? { code: b.code, errorMessage: b.error_message } : {}),
-  };
-
 export function createArenaServer({ store, client, env = process.env, onGenerated = () => {} }) {
   return createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
@@ -120,12 +104,7 @@ export function createArenaServer({ store, client, env = process.env, onGenerate
       if (req.method === "GET" && p === "/api/health") return send(res, 200, { status: "ok", sha: DEPLOY_SHA });
 
       if (req.method === "GET" && p === "/api/leaderboard")
-        return send(
-          res,
-          200,
-          { promptVersion: PROMPT_VERSION, provisionalGames: PROVISIONAL_GAMES, rows: leaderboard(store) },
-          { "Cache-Control": "public, max-age=30" },
-        );
+        return send(res, 200, leaderboardView(store), { "Cache-Control": "public, max-age=30" });
 
       if (req.method === "GET" && p === "/api/models") {
         const cfg = quotaConfig(env);
@@ -142,46 +121,14 @@ export function createArenaServer({ store, client, env = process.env, onGenerate
 
       if (req.method === "GET" && p === "/api/matches") {
         const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 30, 1), 200);
-        const bots = new Map(store.listBots().map((b) => [b.id, b]));
-        const rows = store
-          .listMatches({ status: "done" })
-          .slice(-limit)
-          .reverse()
-          .map((m) => ({
-            id: m.id,
-            bot0: { id: m.bot0, model: bots.get(m.bot0)?.model_id },
-            bot1: { id: m.bot1, model: bots.get(m.bot1)?.model_id },
-            winner: m.winner,
-            reason: m.reason,
-            forfeit: m.forfeit,
-            scores: JSON.parse(m.scores || "null"),
-            ticks: m.ticks,
-            createdAt: m.created_at,
-          }));
-        return send(res, 200, { matches: rows }, { "Cache-Control": "public, max-age=15" });
+        return send(res, 200, matchesView(store, limit), { "Cache-Control": "public, max-age=15" });
       }
 
       let mm = p.match(/^\/api\/matches\/(\d+)$/);
       if (req.method === "GET" && mm) {
-        const m = store.getMatch(Number(mm[1]));
-        if (!m || m.status !== "done") return send(res, 404, { error: "not_found" });
-        return send(
-          res,
-          200,
-          {
-            id: m.id,
-            seed: m.seed,
-            winner: m.winner,
-            reason: m.reason,
-            forfeit: m.forfeit,
-            errors: JSON.parse(m.errors || "null"),
-            scores: JSON.parse(m.scores || "null"),
-            ticks: m.ticks,
-            bots: [publicBot(store.getBot(m.bot0)), publicBot(store.getBot(m.bot1))],
-            record: decodeRecord(m),
-          },
-          { "Cache-Control": "public, max-age=3600" },
-        );
+        const detail = matchDetailView(store, Number(mm[1]));
+        if (!detail) return send(res, 404, { error: "not_found" });
+        return send(res, 200, detail, { "Cache-Control": "public, max-age=3600" });
       }
 
       mm = p.match(/^\/api\/bots\/(\d+)$/);

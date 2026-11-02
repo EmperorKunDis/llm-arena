@@ -1,0 +1,91 @@
+name: Arena (static, optional)
+# OPTIONAL, disabled by default (repo variable ARENA_PAGES=true enables it).
+# Serverless operation: GitHub Actions is the "server". Every few hours it
+# generates bots (within the free OpenRouter quota), plays all pending matches
+# in the QuickJS sandbox, stores the database on the `arena-data` branch and
+# publishes the static site (leaderboard + replays) to GitHub Pages.
+on:
+  schedule:
+    - cron: "17 */4 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: arena
+  cancel-in-progress: false
+
+jobs:
+  run:
+    if: vars.ARENA_PAGES == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      LLM_ARENA_DB: data/arena.sqlite
+      LLM_ARENA_ACCOUNT_DAILY: "50"
+      LLM_ARENA_GLOBAL_DAILY_LIMIT: "0" # no live button on the static site: the whole budget feeds the pool
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Restore arena database
+        run: |
+          mkdir -p data
+          if git fetch --depth 1 origin arena-data 2>/dev/null; then
+            git show origin/arena-data:arena.sqlite > data/arena.sqlite
+            echo "restored $(du -h data/arena.sqlite | cut -f1)"
+          else
+            echo "no arena-data branch yet: starting fresh"
+          fi
+
+      - name: Refresh free-model catalog
+        run: node scripts/catalog.js
+
+      - name: Generate bots (OpenRouter free models)
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [ -z "$OPENROUTER_API_KEY" ]; then echo "OPENROUTER_API_KEY not set: skipping generation"; exit 0; fi
+          node scripts/fill-pool.js --per-model 3 || echo "generation stopped early (quota/infra) — continuing"
+
+      - name: Play pending matches
+        run: node scripts/run-matches.js --limit 2000
+
+      - name: Save arena database
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module -e "import {DatabaseSync} from 'node:sqlite'; const d = new DatabaseSync('data/arena.sqlite'); d.exec('PRAGMA wal_checkpoint(TRUNCATE)'); d.close();"
+          tmp=$(mktemp -d)
+          cp data/arena.sqlite "$tmp/"
+          cd "$tmp"
+          git init -q -b arena-data
+          git add arena.sqlite
+          git -c user.name="llm-arena-bot" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -qm "arena data $(date -u +%FT%TZ)"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" arena-data
+
+      - name: Build static site
+        run: node scripts/build-static.js --out dist --domain arena.svanda.tech
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: run
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

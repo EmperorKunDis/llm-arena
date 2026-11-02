@@ -67,32 +67,27 @@ if ! command -v nginx >/dev/null; then
   exit 0
 fi
 DUMP=$(nginx -T 2>/dev/null || true)
-CERT=$(awk '/server_name[^;]*svanda\.tech/{f=1} f&&/ssl_certificate[ \t]/{print $2; exit}' <<<"$DUMP" | tr -d ';')
-KEY=$(awk '/server_name[^;]*svanda\.tech/{f=1} f&&/ssl_certificate_key/{print $2; exit}' <<<"$DUMP" | tr -d ';')
-if [[ -z $CERT || -z $KEY || ! -f $CERT || ! -f $KEY ]]; then
-  # Cloudflare "Full" does not validate the origin certificate: a self-signed one works.
+# Self-signed fallback (Cloudflare "Full" does not validate the origin certificate).
+FB_CERT=/etc/ssl/llm-arena/origin.pem
+FB_KEY=/etc/ssl/llm-arena/origin.key
+if [[ ! -f $FB_CERT ]]; then
   install -d -m 0750 /etc/ssl/llm-arena
-  CERT=/etc/ssl/llm-arena/origin.pem
-  KEY=/etc/ssl/llm-arena/origin.key
-  [[ -f $CERT ]] || openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=$DOMAIN" \
-    -keyout "$KEY" -out "$CERT" >/dev/null 2>&1
-  chmod 0600 "$KEY"
-  echo "No svanda.tech certificate found in nginx; using a self-signed origin certificate (fine for Cloudflare Full)."
-else
-  echo "Reusing the portfolio certificate: $CERT"
+  openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=$DOMAIN" -keyout "$FB_KEY" -out "$FB_CERT" >/dev/null 2>&1
+  chmod 0600 "$FB_KEY"
 fi
+command -v python3 >/dev/null || die "python3 is required to mirror the portfolio's nginx setup."
+GEN=$(mktemp)
+IFS=$'\t' read -r SITE LINK CHECK_IP CERT < <(python3 "$REL/ops/nginx-site.py" "$REL/ops/nginx-arena.conf" "$GEN" "$FB_CERT" "$FB_KEY" <<<"$DUMP")
+echo "site    : $SITE ${LINK:+(link $LINK)}"
+echo "cert    : $CERT"
+echo "listen  : $(grep -E '^\s*listen' "$GEN" | tr -s ' ' | tr '\n' ' ')"
 
-if [[ -d /etc/nginx/sites-available && -d /etc/nginx/sites-enabled ]]; then
-  SITE=/etc/nginx/sites-available/$DOMAIN
-  LINK=/etc/nginx/sites-enabled/$DOMAIN
-else
-  SITE=/etc/nginx/conf.d/$DOMAIN.conf
-  LINK=""
-fi
-sed -e "s#/etc/ssl/cloudflare/svanda.tech.pem#$CERT#" -e "s#/etc/ssl/cloudflare/svanda.tech.key#$KEY#" \
-  "$REL/ops/nginx-arena.conf" > "$SITE.new"
-[[ -f $SITE ]] && cp -a "$SITE" "$SITE.bak"
-mv "$SITE.new" "$SITE"
+# Remove arena sites left by earlier runs (kept as backups for revert).
+BACKUP=$(mktemp -d)
+for old in /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/$DOMAIN /etc/nginx/conf.d/$DOMAIN.conf "$SITE" ${LINK:+"$LINK"}; do
+  if [[ -e $old || -L $old ]]; then mkdir -p "$BACKUP$(dirname "$old")"; mv "$old" "$BACKUP$old"; fi
+done
+install -m 0644 "$GEN" "$SITE"
 [[ -n $LINK ]] && ln -sfn "$SITE" "$LINK"
 
 if nginx -t 2>/tmp/llm-arena-nginx-test.log; then
@@ -100,14 +95,21 @@ if nginx -t 2>/tmp/llm-arena-nginx-test.log; then
   echo "nginx reloaded."
 else
   cat /tmp/llm-arena-nginx-test.log >&2
-  if [[ -f $SITE.bak ]]; then mv -f "$SITE.bak" "$SITE"; else rm -f "$SITE"; [[ -n $LINK ]] && rm -f "$LINK"; fi
+  rm -f "$SITE"; [[ -n $LINK ]] && rm -f "$LINK"
+  (cd "$BACKUP" && find . \( -type f -o -type l \) | while read -r f; do mv "$f" "/${f#./}"; done)
   die "nginx -t failed; the arena site was reverted and nginx was NOT reloaded (portfolio untouched)."
 fi
+sleep 1
 
 say "Checking"
 LOCAL=$(curl -fsS --max-time 5 http://127.0.0.1:3400/api/health || true)
-VIA_NGINX=$(curl -fsSk --max-time 5 --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN/api/health" || true)
+VIA_NGINX=$(curl -fsSk --max-time 5 --resolve "$DOMAIN:443:$CHECK_IP" "https://$DOMAIN/api/health" || true)
 echo "service : $LOCAL"
 echo "nginx   : $VIA_NGINX"
-[[ $VIA_NGINX == *"$SHA"* ]] || die "nginx does not route $DOMAIN to the arena yet."
+if [[ $VIA_NGINX != *"$SHA"* ]]; then
+  echo; echo "---- diagnostics (paste this to the developer) ----"
+  nginx -T 2>/dev/null | grep -nE "# configuration file|^\s*include|^\s*listen|^\s*server_name" | head -80
+  echo "---------------------------------------------------"
+  die "nginx does not route $DOMAIN to the arena yet."
+fi
 say "Done — https://$DOMAIN (add OPENROUTER_API_KEY to $ENV and 'systemctl restart llm-arena' to enable live generation)"
