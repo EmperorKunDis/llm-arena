@@ -112,4 +112,8 @@ if [[ $VIA_NGINX != *"$SHA"* ]]; then
   echo "---------------------------------------------------"
   die "nginx does not route $DOMAIN to the arena yet."
 fi
-say "Done — https://$DOMAIN (add OPENROUTER_API_KEY to $ENV and 'systemctl restart llm-arena' to enable live generation)"
+if grep -q '^OPENROUTER_API_KEY=.\+' "$ENV"; then
+  say "Done — https://$DOMAIN (OpenRouter key set: live generation and pool filling are on)"
+else
+  say "Done — https://$DOMAIN (add OPENROUTER_API_KEY to $ENV and 'systemctl restart llm-arena' to enable generation)"
+fi
