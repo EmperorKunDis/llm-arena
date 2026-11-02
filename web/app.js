@@ -86,36 +86,67 @@ async function loadModels() {
     : "Live generation is currently off; the leaderboard keeps playing the stored bots.";
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const FAILURES = {
+  quota: "Daily limit reached — try again tomorrow.",
+  halted: "Generation is paused.",
+  not_configured: "Live generation is not configured.",
+  unknown_model: "That model is not in the free catalog any more.",
+};
+
+function showResult(status, r) {
+  if (r.ok && r.stored) {
+    status.className = `status ${r.status === "valid" ? "ok" : "err"}`;
+    status.replaceChildren(
+      document.createTextNode(
+        r.status === "valid"
+          ? "Bot is valid and joins the arena — its matches start shortly. "
+          : `The model's code failed (${r.kind}). That counts as a broken bot for this model. `,
+      ),
+      el("a", { href: `bot.html?id=${r.botId}`, text: "View code" }),
+    );
+    return;
+  }
+  status.className = "status err";
+  if (r.outcome === "duplicate") return (status.textContent = "The model wrote exactly the same bot as before.");
+  if (r.outcome === "rejected")
+    return (status.textContent = `This model refused the request (${r.kind}). It is skipped and not counted.`);
+  status.textContent = `OpenRouter did not deliver a reply (${r.kind || "no response"}). This does not count against the model.`;
+}
+
 async function generate() {
   const btn = $("gen");
   const status = $("gen-status");
   btn.disabled = true;
   status.className = "status";
-  status.textContent = "Asking the model… (free models can take up to a minute)";
-  const { status: code, body } = await getJson("generate", {
+  status.textContent = "Starting…";
+  const start = await getJson("generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ modelId: $("model").value }),
   });
-  if (code === 201) {
-    status.className = `status ${body.status === "valid" ? "ok" : "err"}`;
-    status.replaceChildren(
-      document.createTextNode(
-        body.status === "valid" ? "Bot is valid and joins the arena. " : `The model's code failed (${body.kind}). `,
-      ),
-      el("a", { href: `bot.html?id=${body.botId}`, text: "View code" }),
-    );
-  } else {
+  if (start.status !== 202 || !start.body.jobId) {
     status.className = "status err";
-    const msg = {
-      quota: "Daily limit reached — try again tomorrow.",
-      halted: "Generation is paused.",
-      not_configured: "Live generation is not configured.",
-      unknown_model: "That model is not in the free catalog any more.",
-    }[body.error];
-    status.textContent = msg || `OpenRouter did not answer (${body.kind || body.error}). It will not count against the model.`;
+    status.textContent =
+      FAILURES[start.body.error] ||
+      (start.status >= 500 ? `Server error (${start.status}). Please try again later.` : "Request failed.");
+    return loadModels();
   }
-  await loadModels();
+  const id = start.body.jobId;
+  for (let i = 0; i < 120; i++) {
+    await sleep(3000);
+    const { ok, body } = await getJson(`jobs/${id}`);
+    if (!ok) continue; // transient; keep polling
+    if (body.state === "done") {
+      showResult(status, body);
+      await Promise.all([loadModels(), loadLeaderboard()]);
+      return;
+    }
+    status.textContent = `${short(body.model)} is writing its bot… ${body.elapsedSeconds}s (free models can take 1–3 minutes)`;
+  }
+  status.className = "status err";
+  status.textContent = "Still running after 6 minutes — check the leaderboard later.";
+  loadModels();
 }
 
 $("gen").addEventListener("click", generate);

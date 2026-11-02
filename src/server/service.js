@@ -15,8 +15,8 @@ export async function refreshCatalog({ store, client }) {
   return { ok: true, ...store.syncModels(free), models: free };
 }
 
-/** A visitor pressed "generate a new bot". */
-export async function generateLive({ store, client, ip, modelId, cfg = quotaConfig() }) {
+/** Validate a live request and reserve its quota (fast, synchronous). */
+export function reserveLive({ store, ip, modelId, cfg = quotaConfig() }) {
   const model = store.listModels({ activeOnly: true }).find((m) => m.id === modelId);
   if (!model) return { ok: false, error: "unknown_model" };
   if (store.getSetting("halt")) return { ok: false, error: "halted" };
@@ -28,6 +28,13 @@ export async function generateLive({ store, client, ip, modelId, cfg = quotaConf
   }
   const q = consume(store, liveBuckets(cfg, ipHash));
   if (!q.ok) return { ok: false, error: "quota", scope: q.scope };
+  return { ok: true };
+}
+
+/** A visitor pressed "generate a new bot" (synchronous variant, used by tests/CLI). */
+export async function generateLive({ store, client, ip, modelId, cfg = quotaConfig() }) {
+  const r = reserveLive({ store, ip, modelId, cfg });
+  if (!r.ok) return r;
   const out = await generateBot({ modelId, client, store, source: "live" });
   return { ok: out.stored, ...out };
 }

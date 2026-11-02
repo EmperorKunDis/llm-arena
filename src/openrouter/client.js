@@ -21,7 +21,7 @@ export function classifyStatus(status) {
 export function createOpenRouterClient({
   apiKey,
   fetchImpl = globalThis.fetch,
-  timeoutMs = 90_000,
+  timeoutMs = 240_000, // whole request incl. body: free models can write for 2+ minutes
   referer = "https://arena.svanda.tech",
   title = "LLM Arena",
 } = {}) {
@@ -32,11 +32,22 @@ export function createOpenRouterClient({
     "X-Title": title,
   });
 
+  // The timeout covers the WHOLE exchange including the body: OpenRouter sends
+  // headers immediately and then streams the reply, so a header-only timeout
+  // never fires while a slow model is still writing.
   async function request(path, init) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
-      return { res: await fetchImpl(`${BASE}${path}`, { ...init, signal: ctrl.signal }) };
+      const res = await fetchImpl(`${BASE}${path}`, { ...init, signal: ctrl.signal });
+      const text = await res.text();
+      let json = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        /* non-JSON body */
+      }
+      return { res, json };
     } catch (e) {
       return { netError: e?.name === "AbortError" ? "timeout" : "network_error", message: String(e?.message || e) };
     } finally {
@@ -46,11 +57,10 @@ export function createOpenRouterClient({
 
   return {
     async listModels() {
-      const { res, netError, message } = await request("/models", { method: "GET", headers: headers() });
+      const { res, json, netError, message } = await request("/models", { method: "GET", headers: headers() });
       if (netError) return { ok: false, class: "infra", kind: netError, message };
       if (!res.ok) return { ok: false, ...classifyStatus(res.status), status: res.status };
-      const body = await res.json();
-      return { ok: true, models: body.data || [] };
+      return { ok: true, models: json?.data || [] };
     },
 
     // Reasoning models spend tokens thinking before they answer: a low cap cut
@@ -65,27 +75,18 @@ export function createOpenRouterClient({
         provider: { allow_fallbacks: false },
         reasoning: { effort: "low" },
       };
-      const { res, netError, message } = await request("/chat/completions", {
+      const { res, json, netError, message } = await request("/chat/completions", {
         method: "POST",
         headers: headers(),
         body: JSON.stringify(body),
       });
       if (netError) return { ok: false, class: "infra", kind: netError, message };
       if (!res.ok) {
-        let detail = "";
-        try {
-          detail = (await res.json())?.error?.message || "";
-        } catch {
-          /* ignore */
-        }
-        return { ok: false, ...classifyStatus(res.status), status: res.status, message: String(detail).slice(0, 300) };
+        const e = json?.error || {};
+        const raw = e.metadata?.raw ? ` | ${typeof e.metadata.raw === "string" ? e.metadata.raw : JSON.stringify(e.metadata.raw)}` : "";
+        return { ok: false, ...classifyStatus(res.status), status: res.status, message: `${e.message || ""}${raw}`.slice(0, 400) };
       }
-      let json;
-      try {
-        json = await res.json();
-      } catch {
-        return { ok: false, class: "infra", kind: "bad_response" };
-      }
+      if (!json) return { ok: false, class: "infra", kind: "bad_response" };
       // OpenRouter can return 200 with an error object (e.g. upstream rate limit).
       if (json?.error) {
         const c = classifyStatus(Number(json.error.code) || 502);

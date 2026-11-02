@@ -7,7 +7,9 @@ import { readFile } from "node:fs/promises";
 import { extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { leaderboardView, matchesView, matchDetailView, publicBot } from "./views.js";
-import { generateLive } from "./service.js";
+import { reserveLive } from "./service.js";
+import { generateBot } from "../generate/pipeline.js";
+import { randomUUID } from "node:crypto";
 import { quotaConfig, usage } from "./quota.js";
 import { readFileSync } from "node:fs";
 
@@ -97,6 +99,22 @@ async function serveStatic(res, pathname) {
 }
 
 export function createArenaServer({ store, client, env = process.env, onGenerated = () => {} }) {
+  // Live generation runs as a background job: free models can write for 2+
+  // minutes, longer than Cloudflare's 100 s proxy timeout. The browser polls.
+  const jobs = new Map();
+  const pruneJobs = () => {
+    const cutoff = Date.now() - 60 * 60 * 1000;
+    for (const [id, j] of jobs) if (j.startedAt < cutoff) jobs.delete(id);
+  };
+  // `state` is the job's lifecycle; `status` (valid/invalid) belongs to the bot.
+  const jobView = (id, j) => ({
+    ...(j.result || {}),
+    jobId: id,
+    state: j.state,
+    model: j.modelId,
+    elapsedSeconds: Math.round(((j.finishedAt || Date.now()) - j.startedAt) / 1000),
+  });
+
   return createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
     const p = url.pathname;
@@ -142,24 +160,36 @@ export function createArenaServer({ store, client, env = process.env, onGenerate
         const body = await readJson(req);
         if (typeof body.modelId !== "string") return send(res, 400, { error: "modelId required" });
         if (!env.OPENROUTER_API_KEY) return send(res, 503, { error: "not_configured" });
-        const out = await generateLive({
-          store,
-          client,
-          ip: clientIp(req, env),
-          modelId: body.modelId,
-          cfg: quotaConfig(env),
-        });
-        if (out.ok) onGenerated(out);
-        const status = out.ok
-          ? 201
-          : out.error === "quota"
-            ? 429
-            : out.error === "unknown_model"
-              ? 400
-              : out.error === "not_configured" || out.error === "halted"
-                ? 503
-                : 502;
-        return send(res, status, out);
+        const r = reserveLive({ store, ip: clientIp(req, env), modelId: body.modelId, cfg: quotaConfig(env) });
+        if (!r.ok) {
+          const status =
+            r.error === "quota" ? 429 : r.error === "unknown_model" ? 400 : 503;
+          return send(res, status, r);
+        }
+        pruneJobs();
+        const jobId = randomUUID();
+        const job = { state: "running", modelId: body.modelId, startedAt: Date.now() };
+        jobs.set(jobId, job);
+        generateBot({ modelId: body.modelId, client, store, source: "live" })
+          .then((out) => {
+            job.result = { ok: out.stored, ...out };
+            if (out.stored) onGenerated(out);
+          })
+          .catch((e) => {
+            job.result = { ok: false, outcome: "infra", kind: "internal_error", message: String(e?.message || e).slice(0, 200) };
+          })
+          .finally(() => {
+            job.state = "done";
+            job.finishedAt = Date.now();
+          });
+        return send(res, 202, jobView(jobId, job));
+      }
+
+      mm = p.match(/^\/api\/jobs\/([0-9a-f-]{36})$/);
+      if (req.method === "GET" && mm) {
+        const job = jobs.get(mm[1]);
+        if (!job) return send(res, 404, { error: "not_found" });
+        return send(res, 200, jobView(mm[1], job), { "Cache-Control": "no-store" });
       }
 
       if (req.method === "GET" || req.method === "HEAD") return serveStatic(res, p);

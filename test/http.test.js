@@ -46,7 +46,7 @@ describe("HTTP API", () => {
     expect(detail.bots[0].code).toBeUndefined(); // code only via /api/bots/:id
   });
 
-  it("live generation stores a bot, then enforces the per-IP limit", async () => {
+  it("live generation runs as a background job, then enforces the per-IP limit", async () => {
     const post = () =>
       fetch(base + "/api/generate", {
         method: "POST",
@@ -54,9 +54,17 @@ describe("HTTP API", () => {
         body: JSON.stringify({ modelId: "a/model:free" }),
       });
     const first = await post();
-    expect(first.status).toBe(201);
-    const body = await first.json();
-    expect(body.status).toBe("valid");
+    expect(first.status).toBe(202); // returns immediately (Cloudflare cuts requests at 100 s)
+    const { jobId } = await first.json();
+    let body;
+    for (let i = 0; i < 100; i++) {
+      body = await (await get(`/api/jobs/${jobId}`)).json();
+      if (body.state === "done") break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(body).toMatchObject({ state: "done", ok: true, status: "valid" });
+    expect(body.botId).toBeGreaterThan(0);
+    expect((await get("/api/jobs/00000000-0000-0000-0000-000000000000")).status).toBe(404);
     const bot = await (await get(`/api/bots/${body.botId}`)).json();
     expect(bot.code).toContain("function loop");
     expect((await post()).status).toBe(429);
