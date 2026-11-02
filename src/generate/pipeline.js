@@ -76,6 +76,10 @@ export async function generateBot({ modelId, client, store, source = "pool", onD
   }
 
   const prep = await prepareBot(res.content);
+  if (res.fromReasoning) {
+    prep.normalized = prep.normalized ? `from-reasoning+${prep.normalized}` : "from-reasoning";
+    if (prep.status === "invalid" && prep.errorKind === "no_code") prep.errorKind = "only_reasoning";
+  }
   if (prep.status === "invalid" && res.finishReason === "length") {
     prep.errorKind = "truncated"; // the reply hit the token cap mid-code
     prep.errorMessage = `Reply cut off at the token limit (${prep.errorMessage || "no code"})`;

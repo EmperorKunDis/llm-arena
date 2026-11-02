@@ -57,9 +57,22 @@ describe("streaming from OpenRouter", () => {
     });
     const think = async () => sse(['data: {"choices":[{"delta":{"reasoning":"hmm"}}]}\n\n', "data: [DONE]\n\n"]);
     expect(await createOpenRouterClient({ apiKey: "k", fetchImpl: think }).complete({ model: "m", onDelta: () => {} })).toMatchObject({
-      ok: false,
-      kind: "only_reasoning",
+      ok: true,
+      fromReasoning: true,
+      content: "hmm",
     });
+  });
+});
+
+describe("answers that live only in the reasoning channel", () => {
+  it("use code found in the reasoning, otherwise store an invalid bot (no endless retries)", async () => {
+    const { generateBot } = await import("../src/generate/pipeline.js");
+    const store = openStore();
+    const mk = (content) => ({ complete: async () => ({ ok: true, content, fromReasoning: true, modelActual: "m", provider: "P" }) });
+    const withCode = await generateBot({ modelId: "a/x:free", client: mk("I will write:\n```js\n" + ECONOMY + "\n```"), store });
+    expect(store.getBot(withCode.botId)).toMatchObject({ status: "valid", normalized: "from-reasoning" });
+    const noCode = await generateBot({ modelId: "a/y:free", client: mk("just thinking out loud"), store });
+    expect(store.getBot(noCode.botId)).toMatchObject({ status: "invalid", error_kind: "only_reasoning" });
   });
 });
 

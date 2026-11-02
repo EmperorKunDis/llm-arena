@@ -195,7 +195,13 @@ export function createOpenRouterClient({
       const c = classifyStatus(Number(error.code) || 502);
       return { ok: false, ...c, status: Number(error.code) || 502, message: String(error.message || "").slice(0, 300) };
     }
-    if (content.trim() === "") return { ok: false, class: "infra", kind: reasoning ? "only_reasoning" : "empty_response" };
+    if (content.trim() === "") {
+      if (!reasoning.trim()) return { ok: false, class: "infra", kind: "empty_response" };
+      // Some models put their whole answer into the reasoning channel. That is the
+      // model's own output: hand it on (marked) instead of retrying forever, which
+      // would burn the shared daily quota.
+      return { ok: true, content: reasoning, fromReasoning: true, modelActual, provider, usage, finishReason, reasoningChars: reasoning.length };
+    }
     return { ok: true, content, modelActual, provider, usage, finishReason, reasoningChars: reasoning.length };
   }
 }
