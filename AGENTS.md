@@ -4,14 +4,16 @@ Open-source Screeps-like PvP: free OpenRouter models each write one bot; a deter
 engine runs it in a QuickJS sandbox; a Bradley-Terry leaderboard ranks the models. Plan of record:
 `/Users/emperor/.claude/plans/okey-a-muzu-mit-scalable-umbrella.md` (v2, approved 2026-11-02).
 
-## State (2026-11-02)
+## State (2026-11-02, live)
 - Phases 1–4 implemented locally, 69 tests green (`npm test`). Local repo:
   `/Users/emperor/dev/github/EmperorKunDis/llm-arena`.
-- The public GitHub repo does NOT exist yet: creating a public repo is blocked for the agent by
-  the harness ("Create Public Surface"); the owner creates it with `gh repo create
-  EmperorKunDis/llm-arena --public --source=. --remote=origin --push`.
-- No real OpenRouter call has been made. The key once pasted into chat is COMPROMISED and must be
-  rotated before Phase 0 (`npm run phase0`). Never commit or log keys.
+- LIVE at https://arena.svanda.tech (portfolio VPS 72.62.92.89, release 8f22985), public repo
+  https://github.com/EmperorKunDis/llm-arena. Installed/updated by the owner on the server with
+  `curl -fsSL https://raw.githubusercontent.com/EmperorKunDis/llm-arena/main/ops/install.sh | sudo bash`.
+  The agent has no SSH to that server; every server step goes through the owner running install.sh.
+- OpenRouter key is set in /var/www/llm-arena/.env.production (owner's decision to use the key that
+  was pasted in chat). Local copy for scripts: ~/.config/llm-arena.env (0600). Never commit or log it.
+- Portfolio tab: PR #18 in macos-portfolio (`/hry/llm-arena`), waiting for the owner to merge.
 - Deployment target: `arena.svanda.tech` on the portfolio VPS, same release pattern (see
   DEPLOY.md, ops/). The agent has no access to that VPS (keys live only in GitHub Actions) nor to
   Cloudflare DNS — the owner does the one-time setup. Deploy workflow is gated by repo variable
@@ -20,6 +22,13 @@ engine runs it in a QuickJS sandbox; a Bradley-Terry leaderboard ranks the model
   `frame-ancestors 'self' https://svanda.tech https://www.svanda.tech`.
 
 ## Hard-won lessons
+- Phase 0 with the real key: a per-model 403 ("only available on agentic harnesses") must NOT halt
+  generation (only 401/402 do); Gemma providers reject a separate system role (prompt is one user
+  message); reasoning models need a large max_tokens (16000) or code gets truncated.
+- install.sh: check nginx routing only after a short pause — right after `nginx -s reload` the old
+  workers still answer, which made the first install falsely report "not routed".
+- Harness blocks for the agent: creating public repos/surfaces, merging/readying PRs not explicitly
+  requested, Cloudflare certificate creation, trying SSH keys on servers. Ask the owner instead.
 - QuickJS stack limit must stay far below the host's native WASM stack. At 512 KB a deep
   recursion overflowed the HOST (RangeError) before QuickJS caught it, which would crash the runner
   and void the match instead of scoring a loss. 192 KB is safe; a regression test covers it.
