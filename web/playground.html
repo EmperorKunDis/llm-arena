@@ -1,71 +1,132 @@
 <!doctype html>
-<html lang="en">
+<html lang="cs">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Playground — write your own agent · LLM Arena</title>
+    <title>Vlastní bot · LLM Arena · Martin Švanda</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="stylesheet" href="app.css" />
+    <script type="module" src="shell.js"></script>
     <script type="module" src="playground.js"></script>
   </head>
   <body>
-    <header class="top">
-      <h1><span class="dot"></span><a href="./">LLM Arena</a> · playground</h1>
-      <nav class="small"><a href="./">Leaderboard</a></nav>
-    </header>
-    <p class="tagline">
-      Write your own agent, test it against the reference bots or any model's bot right here in your browser,
-      then submit it — it joins the arena and plays every free model.
-    </p>
-
-    <div class="playground">
-      <section class="panel stack">
-        <div class="row">
-          <h2>Your bot</h2>
-          <span class="small muted">plain JavaScript · define <code>loop(state, api)</code></span>
+    <a class="skip" href="#obsah">Přejít na obsah</a>
+    <header class="site-header" data-site-header></header>
+    <main class="page-content" id="obsah">
+      <nav class="arena-nav" aria-label="Navigace Areny">
+        <a class="arena-name" href="./">LLM Arena</a>
+        <div>
+          <a href="./">Přehled</a><a href="playground.html">Vlastní bot</a
+          ><a href="https://svanda.tech">Portfolio ↗</a>
         </div>
-        <textarea id="editor" spellcheck="false" aria-label="Bot code"></textarea>
-        <div class="row">
-          <button type="button" class="ghost" id="reset">Reset to template</button>
-          <span class="small muted" id="saved"></span>
-        </div>
-        <details>
-          <summary class="small">Bot API (TypeScript types)</summary>
-          <pre class="code" id="api">Loading…</pre>
-        </details>
-      </section>
+      </nav>
+      <div class="page-heading">
+        <p class="eyebrow">LLM ARENA / VLASTNÍ BOT</p>
+        <h1>Vaše strategie. Váš bot.</h1>
+        <p class="tagline">
+          Napište vlastního agenta, vyzkoušejte ho přímo v prohlížeči a pak ho
+          pošlete do Areny. Jeho kód i jméno budou veřejné.
+        </p>
+      </div>
 
-      <section class="stack">
-        <div class="panel stack">
-          <h2>Test match</h2>
-          <label class="small muted" for="opponent">Opponent</label>
-          <select id="opponent"></select>
+      <div class="playground">
+        <section class="panel stack">
           <div class="row">
-            <label class="small muted" for="seed">Map seed</label>
-            <input id="seed" type="number" min="1" value="42" />
-            <button type="button" class="ghost" id="reseed">Random map</button>
+            <h2>Váš bot</h2>
+            <span class="small muted"
+              >JavaScript · funkce <code>loop(state, api)</code></span
+            >
           </div>
-          <button type="button" id="run">Run test match</button>
-          <div class="status" id="run-status" role="status" aria-live="polite"></div>
-          <canvas id="board" width="500" height="420" aria-label="Test match board"></canvas>
-          <div class="controls">
-            <button id="play" type="button" class="ghost" disabled>Play</button>
-            <input id="scrub" type="range" min="0" max="0" value="0" aria-label="Tick" />
-            <span class="mono small" id="tick">0</span>
+          <textarea
+            id="editor"
+            spellcheck="false"
+            aria-label="Kód bota"
+          ></textarea>
+          <div class="row">
+            <button type="button" class="ghost" id="reset">
+              Obnovit šablonu
+            </button>
+            <span class="small muted" id="saved"></span>
           </div>
-          <div class="cmdlog" id="cmdlog"></div>
-        </div>
+          <details>
+            <summary class="small">Rozhraní bota (typy TypeScript)</summary>
+            <pre class="code" id="api">Načítání…</pre>
+          </details>
+        </section>
 
-        <div class="panel stack">
-          <h2>Submit to the arena</h2>
-          <p class="small muted">
-            The server re-checks your bot in its sandbox, then it plays every model twice (sides swapped) and
-            appears on the leaderboard as <code>user/your-name</code>. Limit 5 submissions per day.
-          </p>
-          <input id="name" type="text" maxlength="24" placeholder="agent name (3–24 chars)" aria-label="Agent name" />
-          <button type="button" id="submit">Submit</button>
-          <div class="status" id="submit-status" role="status" aria-live="polite"></div>
-        </div>
-      </section>
-    </div>
+        <section class="stack">
+          <div class="panel stack">
+            <h2>Zkušební partie</h2>
+            <label class="small muted" for="opponent">Soupeř</label>
+            <select id="opponent"></select>
+            <div class="row">
+              <label class="small muted" for="seed">Seed mapy</label>
+              <input id="seed" type="number" min="1" value="42" />
+              <button type="button" class="ghost" id="reseed">Jiná mapa</button>
+            </div>
+            <button type="button" id="run">Spustit zkušební partii</button>
+            <div
+              class="status"
+              id="run-status"
+              role="status"
+              aria-live="polite"
+            ></div>
+            <canvas
+              id="board"
+              width="500"
+              height="420"
+              aria-label="Plán zkušební partie"
+            ></canvas>
+            <div class="controls">
+              <button id="play" type="button" class="ghost" disabled>
+                Přehrát
+              </button>
+              <input
+                id="scrub"
+                type="range"
+                min="0"
+                max="0"
+                value="0"
+                aria-label="Tah"
+              />
+              <span class="mono small" id="tick">0</span>
+            </div>
+            <div class="cmdlog" id="cmdlog"></div>
+          </div>
+
+          <div class="panel stack">
+            <h2>Poslat do Areny</h2>
+            <p class="small muted">
+              Server bota znovu ověří v izolovaném prostředí. Potom hraje proti
+              uloženým botům dvakrát s prohozenými stranami a v žebříčku se
+              zobrazí jako <code>user/your-name</code>. Limit 5 odeslání denně.
+            </p>
+            <input
+              id="name"
+              type="text"
+              maxlength="24"
+              placeholder="jméno agenta (3–24 znaků)"
+              aria-label="Jméno agenta"
+            />
+            <button type="button" id="submit">Odeslat bota</button>
+            <div
+              class="status"
+              id="submit-status"
+              role="status"
+              aria-live="polite"
+            ></div>
+          </div>
+        </section>
+      </div>
+    </main>
+    <footer class="site-footer">
+      <span>© 2026 Martin Švanda · LLM Arena</span>
+      <div>
+        <a href="https://svanda.tech">Zpět na portfolio ↗</a
+        ><a href="https://github.com/EmperorKunDis/llm-arena"
+          >Open source · MIT</a
+        >
+      </div>
+    </footer>
   </body>
 </html>

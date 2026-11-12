@@ -8,7 +8,7 @@ one talks best. It is the companion project to the "verifiable AI" idea on
 
 > Status: **Phases 1–4 complete** — deterministic engine, map generator, bot API, reference
 > bots, a **QuickJS (WebAssembly) sandbox** for untrusted bot code and a process-isolated match
-> runner, and the **OpenRouter generation pipeline** (free-model catalog, quotas, bot pool), a Bradley-Terry **leaderboard** and a **web UI with an in-browser replay viewer** — 69 tests.
+> runner, and the **OpenRouter generation pipeline** (free-model catalog, quotas, bot pool), a Bradley-Terry **leaderboard** and a **web UI with an in-browser replay viewer** — 92 tests.
 
 ## How it works
 
@@ -126,11 +126,24 @@ the pool fills over several days; the live button gets a reserved slice of that 
   Bradley-Terry leaderboard with bootstrap intervals and reference bots, dependency-free HTTP
   server with strict CSP, leaderboard page, bot viewer and a 2D replay viewer that re-simulates
   matches in the browser with the same engine.
-- **Next.** Deploy to `arena.svanda.tech`, embed as a tab on svanda.tech, run Phase 0 with a real
-  key, tune the prompt from what the models actually write.
+- **Deployment.** The public arena is hosted separately at `arena.svanda.tech` and embedded at
+  `svanda.tech/hry/llm-arena`. A local checkout or passing CI does not establish which revision is live;
+  check `/api/health` against the release SHA before reporting a deployment.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) to get involved.
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Portfolio interface and scoring boundaries
+
+The arena uses the svanda.tech light palette, shared identity, Czech navigation and responsive
+layouts across the leaderboard, replay, bot source and playground. The shared header is hidden
+when embedded inside the portfolio. Code remains a dark, readable editor surface.
+
+The game strength rating and runnable-code share are separate measurements. No rating is displayed
+for a model before its first counted match. Only the current prompt cohort, reference bots and
+user bots enter that rating. A provider outage, rejected request or duplicate generation leaves
+a duel unscored; an incomplete pair of matches is never advertised as a draw or win. Only completed
+matches receive replay links. These changes require no database migration and preserve stored results.

@@ -1,55 +1,118 @@
 <!doctype html>
-<html lang="en">
+<html lang="cs">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Replay — LLM Arena</title>
+    <title>Replay · LLM Arena · Martin Švanda</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="stylesheet" href="app.css" />
+    <script type="module" src="shell.js"></script>
     <script type="module" src="replay.js"></script>
   </head>
   <body>
-    <header class="top">
-      <h1><span class="dot"></span><a href="./">LLM Arena</a> · replay</h1>
-      <nav class="small"><a href="./">Leaderboard</a> · <a href="playground.html">Playground</a></nav>
-    </header>
-    <p class="tagline small">
-      Re-simulated in your browser from the recorded commands by the same deterministic engine the server uses.
-      Lines show what the bots ordered in the current tick: <span class="p0">attacks</span>,
-      <span class="src">harvesting</span>, rings mark a new creep.
-    </p>
-    <div class="replay">
-      <div>
-        <canvas id="board" width="750" height="630" aria-label="Game board"></canvas>
-        <div class="controls">
-          <button id="play" type="button">Play</button>
-          <button id="restart" type="button" class="ghost">Restart</button>
-          <select id="speed" aria-label="Speed">
-            <option value="1">1×</option>
-            <option value="4" selected>4×</option>
-            <option value="16">16×</option>
-            <option value="64">64×</option>
-          </select>
-          <input id="scrub" type="range" min="0" max="0" value="0" aria-label="Tick" />
-          <span class="mono small" id="tick">0</span>
+    <a class="skip" href="#obsah">Přejít na obsah</a>
+    <header class="site-header" data-site-header></header>
+    <main class="page-content" id="obsah">
+      <nav class="arena-nav" aria-label="Navigace Areny">
+        <a class="arena-name" href="./">LLM Arena</a>
+        <div>
+          <a href="./">Přehled</a><a href="playground.html">Vlastní bot</a
+          ><a href="https://svanda.tech">Portfolio ↗</a>
         </div>
+      </nav>
+      <div class="page-heading">
+        <p class="eyebrow">LLM ARENA / REPLAY</p>
+        <h1>Každý tah pod kontrolou.</h1>
+        <p class="tagline">
+          Záznam příkazů přehrává stejný engine jako na serveru. Kód botů se při
+          přehrávání nespouští. Čáry ukazují útoky a těžbu, kruhy označují novou
+          jednotku.
+        </p>
       </div>
-      <aside class="panel stack">
-        <h2>Match <span class="muted small" id="meta"></span></h2>
-        <div id="sides"></div>
-        <p class="small" id="result"></p>
-        <h2>This tick</h2>
-        <div class="cmdlog" id="cmdlog"></div>
-      </aside>
-    </div>
 
-    <section class="panel code-panel">
-      <div class="tabs" role="tablist">
-        <button type="button" class="tab active" id="tab0" role="tab">side 0</button>
-        <button type="button" class="tab" id="tab1" role="tab">side 1</button>
-        <a class="small" id="botlink" href="#">open bot page ▸</a>
+      <div class="replay">
+        <div>
+          <canvas
+            id="board"
+            width="750"
+            height="630"
+            aria-label="Herní plán"
+          ></canvas>
+          <div class="controls">
+            <button id="play" type="button">Přehrát</button>
+            <button id="restart" type="button" class="ghost">Od začátku</button>
+            <select id="speed" aria-label="Rychlost">
+              <option value="1">1×</option>
+              <option value="4" selected>4×</option>
+              <option value="16">16×</option>
+              <option value="64">64×</option>
+            </select>
+            <input
+              id="scrub"
+              type="range"
+              min="0"
+              max="0"
+              value="0"
+              aria-label="Tah"
+            />
+            <span class="mono small" id="tick">0</span>
+          </div>
+        </div>
+        <aside class="panel stack">
+          <h2>Partie <span class="muted small" id="meta"></span></h2>
+          <div id="sides"></div>
+          <p class="small" id="result"></p>
+          <h2>Příkazy v tomto tahu</h2>
+          <div class="cmdlog" id="cmdlog"></div>
+        </aside>
       </div>
-      <p class="small muted">The exact code this bot runs every tick — written once, never changed during the match.</p>
-      <pre class="code" id="code">Loading…</pre>
-    </section>
+
+      <section class="panel code-panel">
+        <div class="tabs" role="tablist">
+          <button
+            type="button"
+            class="tab active"
+            id="tab0"
+            role="tab"
+            aria-selected="true"
+            aria-controls="code"
+          >
+            Strana A
+          </button>
+          <button
+            type="button"
+            class="tab"
+            id="tab1"
+            role="tab"
+            aria-selected="false"
+            aria-controls="code"
+            tabindex="-1"
+          >
+            Strana B
+          </button>
+          <a class="small" id="botlink" href="#">Zobrazit bota ↗</a>
+        </div>
+        <p class="small muted">
+          Přesný kód bota. Vznikl jednou a po celou partii se nemění.
+        </p>
+        <pre
+          class="code"
+          id="code"
+          role="tabpanel"
+          aria-labelledby="tab0"
+          tabindex="0"
+        >
+Načítání…</pre>
+      </section>
+    </main>
+    <footer class="site-footer">
+      <span>© 2026 Martin Švanda · LLM Arena</span>
+      <div>
+        <a href="https://svanda.tech">Zpět na portfolio ↗</a
+        ><a href="https://github.com/EmperorKunDis/llm-arena"
+          >Open source · MIT</a
+        >
+      </div>
+    </footer>
   </body>
 </html>

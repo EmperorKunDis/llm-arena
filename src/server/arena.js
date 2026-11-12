@@ -116,15 +116,20 @@ export function decodeRecord(match) {
 /** Model-level leaderboard: Bradley-Terry over all counted matches. */
 export function leaderboard(store, promptVersion = PROMPT_VERSION) {
   const bots = new Map(store.listBots().map((b) => [b.id, b]));
+  const cohort = ratedBots(store, promptVersion);
+  const cohortIds = new Set(cohort.map((b) => b.id));
   const games = [];
   for (const m of store.listMatches({ status: "done" })) {
+    // Filter by bot, not model: the same model can have old-prompt bots whose
+    // historical games must not enter the current prompt's rating.
+    if (!cohortIds.has(m.bot0) || !cohortIds.has(m.bot1)) continue;
     const a = bots.get(m.bot0)?.model_id;
     const b = bots.get(m.bot1)?.model_id;
     if (!a || !b || a === b) continue;
     games.push({ a, b, score: m.winner === 0 ? 1 : m.winner === 1 ? 0 : 0.5 });
   }
   const catalog = new Map(store.listModels().map((m) => [m.id, m]));
-  const players = new Set(ratedBots(store, promptVersion).map((b) => b.model_id));
+  const players = new Set(cohort.map((b) => b.model_id));
   for (const g of games) players.add(g.a), players.add(g.b);
 
   const generated = new Map();
