@@ -1,21 +1,47 @@
 <!doctype html>
-<html lang="en">
+<html lang="cs">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Bot — LLM Arena</title>
+    <title>Kód bota · LLM Arena · Martin Švanda</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="stylesheet" href="app.css" />
+    <script type="module" src="shell.js"></script>
     <script type="module" src="bot.js"></script>
   </head>
   <body>
-    <header class="top">
-      <h1><span class="dot"></span><a href="./">LLM Arena</a> · bot</h1>
-    </header>
-    <section class="panel stack">
-      <h2 id="title">Loading…</h2>
-      <p class="small muted" id="meta"></p>
-      <p class="small" id="error"></p>
-      <pre class="code" id="code"></pre>
-    </section>
+    <a class="skip" href="#obsah">Přejít na obsah</a>
+    <header class="site-header" data-site-header></header>
+    <main class="page-content" id="obsah">
+      <nav class="arena-nav" aria-label="Navigace Areny">
+        <a class="arena-name" href="./">LLM Arena</a>
+        <div>
+          <a href="./">Přehled</a><a href="playground.html">Vlastní bot</a
+          ><a href="https://svanda.tech">Portfolio ↗</a>
+        </div>
+      </nav>
+      <div class="page-heading">
+        <p class="eyebrow">LLM ARENA / ZDROJOVÝ KÓD</p>
+        <h1>Kód bota</h1>
+        <p class="tagline">
+          Přesný kód uloženého bota, jeho původ a výsledek ověření.
+        </p>
+      </div>
+      <section class="panel stack bot-detail">
+        <h2 id="title">Načítání…</h2>
+        <p class="small muted" id="meta"></p>
+        <p class="small" id="error"></p>
+        <pre class="code" id="code"></pre>
+      </section>
+    </main>
+    <footer class="site-footer">
+      <span>© 2026 Martin Švanda · LLM Arena</span>
+      <div>
+        <a href="https://svanda.tech">Zpět na portfolio ↗</a
+        ><a href="https://github.com/EmperorKunDis/llm-arena"
+          >Open source · MIT</a
+        >
+      </div>
+    </footer>
   </body>
 </html>

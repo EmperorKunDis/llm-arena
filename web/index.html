@@ -1,108 +1,260 @@
 <!doctype html>
-<html lang="en">
+<html lang="cs">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>LLM Arena — which free model writes the best bot?</title>
     <meta
       name="description"
-      content="Free LLMs each write a game bot once. A deterministic engine runs it. A Bradley-Terry leaderboard measures which model actually plays best."
+      content="Dva jazykové modely napíšou herní boty. Stejný engine je prověří v souboji a každý výsledek si můžete přehrát. LLM Arena Martina Švandy."
     />
+    <title>LLM Arena — modely píšou, boti hrají · Martin Švanda</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="stylesheet" href="app.css" />
+    <script type="module" src="shell.js"></script>
     <script type="module" src="app.js"></script>
   </head>
   <body>
-    <header class="top">
-      <h1><span class="dot"></span>LLM Arena</h1>
-      <nav class="small">
-        <a href="playground.html"><strong>Write your own agent ▸</strong></a>
-        · <a href="https://github.com/EmperorKunDis/llm-arena" rel="noopener">Source (MIT)</a>
-        · <a href="https://svanda.tech" rel="noopener">svanda.tech</a>
+    <a class="skip" href="#obsah">Přejít na obsah</a>
+    <header class="site-header" data-site-header></header>
+    <main id="obsah" class="page-content">
+      <nav class="arena-nav" aria-label="Navigace Areny">
+        <a class="arena-name" href="./" aria-current="page">LLM Arena</a>
+        <div>
+          <a href="playground.html">Vlastní bot ↗</a
+          ><a href="#princip">Jak to funguje</a
+          ><a href="https://github.com/EmperorKunDis/llm-arena"
+            >Zdrojový kód ↗</a
+          >
+        </div>
       </nav>
-    </header>
-    <p class="tagline">
-      Free models from OpenRouter each write a bot <strong>once</strong>. A deterministic engine runs that
-      code every tick in a sandbox. The leaderboard measures which model actually <em>plays</em> best —
-      every result is replayable.
-    </p>
-
-    <div class="grid top-grid">
-      <section class="panel stack">
-        <div class="row">
-          <h2>Live from OpenRouter</h2>
-          <span class="badge live-badge" id="live-count">idle</span>
-        </div>
-        <p class="small muted" id="live-hint">
-          Duels run here live: two models write their bots side by side — you watch them think and code — then the bots fight.
-        </p>
-        <div id="duels-live"></div>
-        <div id="live"></div>
-        <div id="recent-gen" class="small"></div>
-      </section>
-      <section class="panel stack">
-        <div class="row">
-          <h2>Featured match</h2>
-          <a class="small" id="featured-link" href="#">full replay ▸</a>
-        </div>
-        <div class="small" id="featured-title"></div>
-        <canvas id="featured" width="460" height="390" aria-label="Featured match"></canvas>
-        <div class="small muted mono" id="featured-tick"></div>
-      </section>
-    </div>
-
-    <div class="grid">
-      <section class="panel">
-        <h2>Leaderboard</h2>
-        <p class="muted small" id="lb-meta">Loading…</p>
-        <div class="table-wrap"><table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Model</th>
-              <th class="num">Rating</th>
-              <th class="num col-ci">95 %</th>
-              <th class="num">W/L/D</th>
-              <th class="num">Valid code</th>
-            </tr>
-          </thead>
-          <tbody id="lb"></tbody>
-        </table></div>
-      </section>
-
-      <aside>
-        <section class="panel stack">
-          <h2>Start a duel</h2>
-          <p class="muted small">
-            Pick two free models. Both write their bot <strong>at the same time</strong> (watch them live above),
-            then the two bots fight twice with sides swapped. Code that cannot run loses.
+      <section class="hero" aria-labelledby="arena-title">
+        <div>
+          <p class="eyebrow">
+            <span class="dot"></span> EXPERIMENT / AI &amp; HERNÍ STRATEGIE
           </p>
-          <label class="small muted" for="modelA">Model A</label>
-          <select id="modelA" aria-label="Model A"></select>
-          <label class="small muted" for="modelB">Model B</label>
-          <select id="modelB" aria-label="Model B"></select>
-          <button id="gen" type="button">Start duel</button>
-          <div class="status" id="gen-status" role="status" aria-live="polite"></div>
-          <p class="muted small" id="gen-quota"></p>
+          <h1 id="arena-title">Modely píšou.<br /><span>Boti hrají.</span></h1>
+          <p class="intro">
+            Který model napíše lepšího herního bota? Dva modely dostanou stejné
+            zadání. Jejich kód se pak utká ve strategické hře. Průběh, kód i
+            výsledek si můžete prohlédnout.
+          </p>
+          <div class="hero-actions">
+            <a class="button-link" href="#duel"
+              >Spustit duel <span aria-hidden="true">↗</span></a
+            ><a class="text-link" href="playground.html"
+              >Napsat vlastního bota →</a
+            >
+          </div>
+        </div>
+        <aside class="principle-card" aria-label="Princip souboje">
+          <p class="eyebrow">OD ZADÁNÍ K VÝSLEDKU</p>
+          <h2>Schopnost ukáže<br />až běžící kód.</h2>
+          <ol class="flow">
+            <li>
+              <span>01</span>
+              <div>
+                <strong>Stejná pravidla</strong
+                ><small>Modely napíšou boty souběžně.</small>
+              </div>
+            </li>
+            <li>
+              <span>02</span>
+              <div>
+                <strong>Dvě partie, prohozené strany</strong
+                ><small>Hotový kód hraje bez dalších volání LLM.</small>
+              </div>
+            </li>
+            <li>
+              <span>03</span>
+              <div>
+                <strong>Ověřitelný výsledek</strong
+                ><small>Záznam příkazů lze znovu přehrát.</small>
+              </div>
+            </li>
+          </ol>
+        </aside>
+      </section>
+      <div class="metrics" aria-label="Aktuální data Areny">
+        <div>
+          <strong id="model-count">—</strong><span>Dostupných modelů</span>
+        </div>
+        <div>
+          <strong id="rated-count">—</strong
+          ><span>Modelů s herním ratingem</span>
+        </div>
+        <div>
+          <strong id="valid-count">—</strong><span>Spustitelných LLM botů</span>
+        </div>
+      </div>
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">01 / PRŮBĚH SOUBOJŮ</p>
+          <h2>Od prvního tokenu po poslední tah.</h2>
+        </div>
+        <p>Generování živě. Odehrané partie ze záznamu.</p>
+      </div>
+      <div class="grid top-grid">
+        <section class="panel stack" aria-labelledby="live-title">
+          <div class="row">
+            <h2 id="live-title">Modely právě tvoří</h2>
+            <span class="badge live-badge" id="live-count">Načítání…</span>
+          </div>
+          <p class="small muted" id="live-hint">
+            Během duelu tu uvidíte přicházející text a kód obou modelů.
+            Přemýšlení je viditelné jen tehdy, když ho poskytovatel zpřístupní.
+          </p>
+          <div id="duels-live"></div>
+          <div id="live"></div>
+          <div id="recent-gen" class="small"></div>
         </section>
-
-        <section class="panel">
-          <h2>Recent matches</h2>
-          <div id="matches" class="small muted">Loading…</div>
+        <section class="panel stack" aria-labelledby="featured-heading">
+          <div class="row">
+            <h2 id="featured-heading">Partie ze záznamu</h2>
+            <a class="small" id="featured-link" href="replay.html" hidden
+              >Otevřít replay ↗</a
+            >
+          </div>
+          <div class="small" id="featured-title">Načítám odehranou partii…</div>
+          <canvas
+            id="featured"
+            width="460"
+            height="390"
+            aria-label="Přehrávání odehrané partie"
+          ></canvas>
+          <div class="legend">
+            <span><i class="sw p0"></i>Strana A</span
+            ><span><i class="sw p1"></i>Strana B</span
+            ><span><i class="sw src"></i>Energie</span>
+          </div>
+          <div class="small muted mono" id="featured-tick"></div>
         </section>
-      </aside>
-    </div>
-
-    <footer>
-      <p>
-        <strong>How it is scored.</strong> Every pair of bots plays twice on the same symmetric map with sides
-        swapped. A bot that crashes or exhausts its fuel loses; a match where both fail is void; server
-        hiccups are retried and never counted. Ratings are Bradley-Terry on the Elo scale with a bootstrap
-        95 % interval; <em>provisional</em> means fewer than <span id="prov">10</span> games.
-      </p>
-      <p>
-        <strong>Privacy.</strong> Only the game rules and map description are sent to OpenRouter. Some free
-        models may log or train on prompts. Visitor IPs are stored only as a daily-salted hash for rate limits.
-      </p>
+      </div>
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">02 / VÝSLEDKY</p>
+          <h2>Herní síla. I schopnost napsat kód.</h2>
+        </div>
+      </div>
+      <div class="grid">
+        <section class="panel" aria-labelledby="leaderboard-title">
+          <h2 id="leaderboard-title">Žebříček modelů</h2>
+          <p class="muted small" id="lb-meta" role="status">Načítání…</p>
+          <p class="small muted">
+            Rating porovnává herní výsledky spustitelných botů. Úspěšnost
+            generování je zvlášť ve sloupci „Funkční kód“. Referenční boti jsou
+            ručně napsané srovnávací strategie.
+          </p>
+          <div
+            class="table-wrap"
+            tabindex="0"
+            role="region"
+            aria-label="Žebříček — na úzké obrazovce lze posouvat do stran"
+          >
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">#</th>
+                  <th scope="col">Model</th>
+                  <th scope="col" class="num">Rating</th>
+                  <th scope="col" class="num col-ci">95% interval</th>
+                  <th scope="col" class="num">
+                    <abbr title="Výhry / prohry / remízy">V/P/R</abbr>
+                  </th>
+                  <th scope="col" class="num">Funkční kód</th>
+                </tr>
+              </thead>
+              <tbody id="lb"></tbody>
+            </table>
+          </div>
+        </section>
+        <aside>
+          <section
+            class="panel stack duel-form"
+            id="duel"
+            aria-labelledby="duel-title"
+          >
+            <p class="eyebrow">VYBERTE SOUPEŘE</p>
+            <h2 id="duel-title">Spustit vlastní duel</h2>
+            <p class="muted small">
+              Dva bezplatné modely napíšou boty zároveň. Pak hrají dvakrát na
+              stejné mapě s prohozenými stranami.
+            </p>
+            <label class="small" for="modelA">Model A</label
+            ><select id="modelA" aria-label="Model A"></select
+            ><label class="small" for="modelB">Model B</label
+            ><select id="modelB" aria-label="Model B"></select
+            ><button id="gen" type="button" disabled>Spustit duel ↗</button>
+            <div
+              class="status"
+              id="gen-status"
+              role="status"
+              aria-live="polite"
+            ></div>
+            <p class="muted small" id="gen-quota"></p>
+          </section>
+          <section class="panel">
+            <h2>Poslední partie</h2>
+            <div id="matches" class="small muted">Načítání…</div>
+          </section>
+        </aside>
+      </div>
+      <section class="methodology" id="princip" aria-labelledby="princip-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">03 / JAK TO FUNGUJE</p>
+            <h2 id="princip-title">Co výsledek skutečně znamená.</h2>
+          </div>
+        </div>
+        <div class="method-grid">
+          <article>
+            <span class="step-label">01 / JEDNO ZADÁNÍ</span>
+            <h3>Model vytvoří strategii</h3>
+            <p>
+              Každý model přes OpenRouter napíše JavaScript bota. Kód se ověří v
+              izolovaném prostředí. Během partie se nemění a LLM už nerozhoduje
+              jednotlivé tahy.
+            </p>
+          </article>
+          <article>
+            <span class="step-label">02 / STEJNÝ ENGINE</span>
+            <h3>Bot zahraje dvě partie</h3>
+            <p>
+              Těží energii, vytváří jednotky, staví a útočí na základnu soupeře.
+              Dvě partie se stejným seedem a prohozenými stranami omezují výhodu
+              startovní pozice.
+            </p>
+          </article>
+          <article>
+            <span class="step-label">03 / DOHLEDATELNÉ HODNOCENÍ</span>
+            <h3>Výsledek jde přehrát</h3>
+            <p>
+              Rating používá Bradley–Terryho model na Elo škále a 95% interval
+              odhadnutý bootstrapem. Předběžný rating znamená méně než
+              <span id="prov">10</span> partií. Výpadky poskytovatele a neúplné
+              duely nemají vítěze.
+            </p>
+          </article>
+        </div>
+        <details class="privacy">
+          <summary>Jaká data odcházejí do OpenRouteru?</summary>
+          <p>
+            Odesílá se zadání hry a popis API, nikoli kód napsaný návštěvníkem v
+            editoru. Někteří poskytovatelé bezplatných modelů mohou zadání
+            ukládat nebo používat k trénování. Pro denní limity se ukládá hash
+            IP adresy s denně odvozeným klíčem. Odeslaný vlastní bot a jeho
+            jméno jsou veřejné.
+          </p>
+        </details>
+      </section>
+    </main>
+    <footer class="site-footer">
+      <span>© 2026 Martin Švanda · LLM Arena</span>
+      <div>
+        <a href="https://svanda.tech">Zpět na portfolio ↗</a
+        ><a href="https://github.com/EmperorKunDis/llm-arena"
+          >Open source · MIT</a
+        >
+      </div>
     </footer>
   </body>
 </html>

@@ -4,8 +4,8 @@
 import { createGame, step, scoreOf } from "./engine/engine.js";
 import { TILE, RULES } from "./engine/constants.js";
 
-export const COLORS = ["#4ecca3", "#ff6b8b"];
-const SOURCE = "#ffd54a";
+export const COLORS = ["#315c9a", "#a75032"];
+const SOURCE = "#b88727";
 
 export class Board {
   constructor(canvas) {
@@ -16,18 +16,25 @@ export class Board {
   draw(state, lastCmds = null) {
     const { ctx, canvas } = this;
     const { width, height, map } = state;
-    const cell = Math.floor(Math.min(canvas.width / width, canvas.height / height));
+    const cell = Math.floor(
+      Math.min(canvas.width / width, canvas.height / height),
+    );
     const ox = Math.floor((canvas.width - cell * width) / 2);
     const oy = Math.floor((canvas.height - cell * height) / 2);
     const at = (x, y) => [ox + x * cell, oy + y * cell];
     const mid = (x, y) => [ox + x * cell + cell / 2, oy + y * cell + cell / 2];
 
-    ctx.fillStyle = "#0a0d11";
+    ctx.fillStyle = "#e9edf3";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     for (let y = 0; y < height; y++)
       for (let x = 0; x < width; x++) {
         const [px, py] = at(x, y);
-        ctx.fillStyle = map.tiles[y * width + x] === TILE.WALL ? "#3a434e" : (x + y) % 2 ? "#0f1419" : "#11161c";
+        ctx.fillStyle =
+          map.tiles[y * width + x] === TILE.WALL
+            ? "#9eaabb"
+            : (x + y) % 2
+              ? "#edf0f5"
+              : "#e5eaf1";
         ctx.fillRect(px, py, cell, cell);
       }
 
@@ -37,14 +44,16 @@ export class Board {
         if (st.kind !== "tower") continue;
         const r = RULES.TOWER_RANGE;
         const [px, py] = at(st.x - r, st.y - r);
-        ctx.fillStyle = i === 0 ? "rgba(78,204,163,0.06)" : "rgba(255,107,139,0.06)";
+        ctx.fillStyle =
+          i === 0 ? "rgba(49,92,154,0.08)" : "rgba(167,80,50,0.08)";
         ctx.fillRect(px, py, cell * (2 * r + 1), cell * (2 * r + 1));
       }
     });
 
     for (const s of state.sources) {
       const [px, py] = at(s.x, s.y);
-      ctx.globalAlpha = s.energy > 0 ? 0.35 + 0.65 * (s.energy / RULES.SOURCE_ENERGY) : 0.12;
+      ctx.globalAlpha =
+        s.energy > 0 ? 0.35 + 0.65 * (s.energy / RULES.SOURCE_ENERGY) : 0.12;
       ctx.fillStyle = SOURCE;
       ctx.fillRect(px + 2, py + 2, cell - 4, cell - 4);
       ctx.globalAlpha = 1;
@@ -65,10 +74,11 @@ export class Board {
       ctx.globalAlpha = p.dead ? 0.25 : 1;
       ctx.fillRect(sx + 1, sy + 1, cell - 2, cell - 2);
       ctx.globalAlpha = 1;
-      ctx.strokeStyle = "#0a0d11";
+      ctx.strokeStyle = "#e9edf3";
       ctx.lineWidth = 2;
       ctx.strokeRect(sx + cell * 0.3, sy + cell * 0.3, cell * 0.4, cell * 0.4);
-      if (p.spawn.hp < RULES.SPAWN_HP) bar(p.spawn.x, p.spawn.y, p.spawn.hp / RULES.SPAWN_HP, c);
+      if (p.spawn.hp < RULES.SPAWN_HP)
+        bar(p.spawn.x, p.spawn.y, p.spawn.hp / RULES.SPAWN_HP, c);
 
       for (const st of p.structures.values()) {
         const [px, py] = at(st.x, st.y);
@@ -79,7 +89,8 @@ export class Board {
           ctx.lineTo(px + cell - 3, py + cell - 3);
           ctx.lineTo(px + 3, py + cell - 3);
           ctx.fill();
-          if (st.hp < RULES.TOWER_HP) bar(st.x, st.y, st.hp / RULES.TOWER_HP, c);
+          if (st.hp < RULES.TOWER_HP)
+            bar(st.x, st.y, st.hp / RULES.TOWER_HP, c);
         } else {
           ctx.globalAlpha = 0.55;
           ctx.fillRect(px + 3, py + 3, cell - 6, cell - 6);
@@ -119,7 +130,8 @@ export class Board {
             if (!from || !to) continue;
             const [ax, ay] = mid(from.x, from.y);
             const [bx, by] = mid(to.x, to.y);
-            ctx.strokeStyle = cmd.op === "attack" ? COLORS[i] : "rgba(255,213,74,0.7)";
+            ctx.strokeStyle =
+              cmd.op === "attack" ? COLORS[i] : "rgba(139,99,22,0.75)";
             ctx.lineWidth = cmd.op === "attack" ? 3 : 1.5;
             ctx.beginPath();
             ctx.moveTo(ax, ay);
@@ -145,11 +157,15 @@ export function describeCmds(cmds) {
   const out = [];
   for (const c of cmds || []) {
     if (c.op === "spawn") out.push("spawn a creep");
-    else if (c.op === "move") out.push(`${c.id} step ${["N", "NE", "E", "SE", "S", "SW", "W", "NW"][c.dir]}`);
+    else if (c.op === "move")
+      out.push(
+        `${c.id} step ${["N", "NE", "E", "SE", "S", "SW", "W", "NW"][c.dir]}`,
+      );
     else if (c.op === "moveTo") out.push(`${c.id} → (${c.x}, ${c.y})`);
     else if (c.op === "harvest") out.push(`${c.id} harvest ${c.source}`);
     else if (c.op === "transfer") out.push(`${c.id} deliver energy`);
-    else if (c.op === "build") out.push(`${c.id} build ${c.kind} (${c.x}, ${c.y})`);
+    else if (c.op === "build")
+      out.push(`${c.id} build ${c.kind} (${c.x}, ${c.y})`);
     else if (c.op === "attack") out.push(`${c.id} attack ${c.target}`);
   }
   return out;
@@ -203,7 +219,8 @@ export class ReplayPlayer {
       this.seek(Math.min(this.total, this.cursor + this.speed));
       if (this.cursor >= this.total) {
         this.playing = false;
-        if (this.loop) setTimeout(() => (this.reset(), this.toggle(true)), 2500);
+        if (this.loop)
+          setTimeout(() => (this.reset(), this.toggle(true)), 2500);
         this.onUpdate(this);
       }
     }

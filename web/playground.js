@@ -55,7 +55,7 @@ editor.addEventListener("input", () => {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     localStorage.setItem(KEY, editor.value);
-    $("saved").textContent = "saved in this browser";
+    $("saved").textContent = "uloženo v tomto prohlížeči";
   }, 400);
 });
 editor.addEventListener("keydown", (e) => {
@@ -65,7 +65,7 @@ editor.addEventListener("keydown", (e) => {
   editor.setRangeText("  ", s, t, "end");
 });
 $("reset").addEventListener("click", () => {
-  if (confirm("Replace your code with the template?")) {
+  if (confirm("Nahradit váš kód výchozí šablonou?")) {
     editor.value = TEMPLATE;
     localStorage.setItem(KEY, TEMPLATE);
   }
@@ -73,7 +73,7 @@ $("reset").addEventListener("click", () => {
 fetch("engine/bot-api.d.ts")
   .then((r) => r.text())
   .then((t) => ($("api").textContent = t))
-  .catch(() => ($("api").textContent = "unavailable"));
+  .catch(() => ($("api").textContent = "není dostupné"));
 
 // opponents
 let opponents = [];
@@ -91,7 +91,10 @@ let opponents = [];
   const rush = opponents.find((o) => o.model === "reference/economy");
   if (rush) sel.value = String(rush.id);
 })();
-$("reseed").addEventListener("click", () => ($("seed").value = String(1 + Math.floor(Math.random() * 1e9))));
+$("reseed").addEventListener(
+  "click",
+  () => ($("seed").value = String(1 + Math.floor(Math.random() * 1e9))),
+);
 
 // test match
 let player = null;
@@ -103,7 +106,7 @@ function renderLog(p) {
     const col = document.createElement("div");
     const head = document.createElement("div");
     head.className = `p${i} small`;
-    head.textContent = i === 0 ? "your bot" : "opponent";
+    head.textContent = i === 0 ? "váš bot" : "soupeř";
     const ul = document.createElement("ul");
     const lines = describeCmds(list);
     for (const l of lines.slice(0, 8)) {
@@ -114,7 +117,7 @@ function renderLog(p) {
     if (!lines.length) {
       const li = document.createElement("li");
       li.className = "muted";
-      li.textContent = "(no orders)";
+      li.textContent = "(bez příkazů)";
       ul.append(li);
     }
     col.append(head, ul);
@@ -125,19 +128,21 @@ function renderLog(p) {
 $("run").addEventListener("click", () => {
   const opp = opponents.find((o) => String(o.id) === $("opponent").value);
   const status = $("run-status");
-  if (!opp) return (status.textContent = "Pick an opponent.");
+  if (!opp) return (status.textContent = "Vyberte soupeře.");
   status.className = "status";
-  status.textContent = "Running…";
+  status.textContent = "Partie běží…";
   $("run").disabled = true;
   const worker = new Worker("playground-worker.js", { type: "module" });
   const killer = setTimeout(() => {
     worker.terminate();
     status.className = "status err";
-    status.textContent = "Your bot took too long (an infinite loop?). In the arena that is a loss (fuel exhausted).";
+    status.textContent =
+      "Zkouška překročila časový limit (možná nekonečná smyčka). Server bota posuzuje samostatně podle limitu výpočetní práce.";
     $("run").disabled = false;
   }, 20000);
   worker.onmessage = ({ data }) => {
-    if (data.progress) return (status.textContent = `Running… tick ${data.progress}`);
+    if (data.progress)
+      return (status.textContent = `Partie běží… tah ${data.progress}`);
     clearTimeout(killer);
     worker.terminate();
     $("run").disabled = false;
@@ -147,21 +152,26 @@ $("run").addEventListener("click", () => {
       return;
     }
     const r = data.result;
-    const verdict = r.winner === null ? "Draw" : r.winner === 0 ? "You win" : "You lose";
+    const verdict =
+      r.winner === null
+        ? "Remíza"
+        : r.winner === 0
+          ? "Vyhráváte"
+          : "Prohráváte";
     const why =
       r.reason === "model_error"
         ? r.forfeit === 0
-          ? ` — your bot crashed at tick ${data.error.tick}: ${data.error.message}`
-          : ` — the opponent crashed: ${data.error.message}`
+          ? ` — váš bot selhal v tahu ${data.error.tick}: ${data.error.message}`
+          : ` — soupeř selhal: ${data.error.message}`
         : r.reason === "spawn_destroyed"
-          ? " — spawn destroyed"
-          : " — tick limit";
+          ? " — zničená základna"
+          : " — limit tahů";
     status.className = `status ${r.winner === 0 ? "ok" : r.winner === null ? "" : "err"}`;
-    status.textContent = `${verdict}${why} · score ${r.scores[0]} : ${r.scores[1]} · ${r.ticks} ticks`;
+    status.textContent = `${verdict}${why} · skóre ${r.scores[0]} : ${r.scores[1]} · ${r.ticks} tahů`;
     player = new ReplayPlayer(data.record, board, (p) => {
       $("tick").textContent = `${p.state.tick} / ${r.ticks}`;
       $("scrub").value = String(p.cursor);
-      $("play").textContent = p.playing ? "Pause" : "Play";
+      $("play").textContent = p.playing ? "Pozastavit" : "Přehrát";
       renderLog(p);
     });
     player.speed = 8;
@@ -174,22 +184,29 @@ $("run").addEventListener("click", () => {
     worker.terminate();
     $("run").disabled = false;
     status.className = "status err";
-    status.textContent = `Could not run: ${e.message || "worker error"}`;
+    status.textContent = `Nepodařilo se spustit: ${e.message || "chyba pracovníka"}`;
   };
-  worker.postMessage({ seed: Number($("seed").value) || 42, code0: editor.value, code1: opp.code });
+  worker.postMessage({
+    seed: Number($("seed").value) || 42,
+    code0: editor.value,
+    code1: opp.code,
+  });
 });
 $("play").addEventListener("click", () => player && player.toggle());
-$("scrub").addEventListener("input", (e) => player && player.seek(Number(e.target.value)));
+$("scrub").addEventListener(
+  "input",
+  (e) => player && player.seek(Number(e.target.value)),
+);
 
 // submit
 if (STATIC) {
   $("submit").disabled = true;
-  $("submit-status").textContent = "Submissions need the live server.";
+  $("submit-status").textContent = "Odesílání botů vyžaduje běžící server.";
 }
 $("submit").addEventListener("click", async () => {
   const status = $("submit-status");
   status.className = "status";
-  status.textContent = "Checking your bot in the server sandbox…";
+  status.textContent = "Ověřuji bota v izolovaném prostředí serveru…";
   $("submit").disabled = true;
   const { status: code, body } = await getJson("submit", {
     method: "POST",
@@ -202,13 +219,17 @@ $("submit").addEventListener("click", async () => {
     status.replaceChildren(
       document.createTextNode(
         body.status === "valid"
-          ? `Accepted as ${body.model}. Its matches start within a minute. `
-          : `The sandbox rejected it (${body.errorKind}: ${body.errorMessage}). `,
+          ? `Přijato jako ${body.model}. Partie budou zařazeny do fronty. `
+          : `Ověření našlo chybu (${body.errorKind}: ${body.errorMessage}). `,
       ),
-      Object.assign(document.createElement("a"), { href: `bot.html?id=${body.botId}`, textContent: "View" }),
+      Object.assign(document.createElement("a"), {
+        href: `bot.html?id=${body.botId}`,
+        textContent: "Zobrazit",
+      }),
     );
   } else {
     status.className = "status err";
-    status.textContent = body.message || body.error || `Failed (${code}).`;
+    status.textContent =
+      body.message || body.error || `Odeslání selhalo (${code}).`;
   }
 });

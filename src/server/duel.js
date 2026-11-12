@@ -57,30 +57,43 @@ export async function runDuel({ store, client, jobs, duels, modelA, modelB, sour
     }));
     const valid = sides.map((s) => s.status === "valid");
     let result;
-    if (valid[0] && valid[1]) {
+    if (sides.some((s) => s.status === null)) {
+      // No stored bot is not a code failure: the provider may be unavailable,
+      // reject a request, or return an already-stored bot. Never award a win.
+      result = { sides, matches: [], points: null, score: null, winner: null, reason: "generation_unavailable" };
+    } else if (valid[0] && valid[1]) {
       const seed = pairSeed(sides[0].botId, sides[1].botId);
       const opts = runner ? { runner } : {};
       const m1 = await playMatch(store, { bot0: sides[0].botId, bot1: sides[1].botId, seed }, opts);
       const m2 = await playMatch(store, { bot0: sides[1].botId, bot1: sides[0].botId, seed }, opts);
       const r1 = store.getMatch(m1);
       const r2 = store.getMatch(m2);
-      const points = [0, 0];
-      const score = [0, 0];
-      // r1: A is side 0; r2: A is side 1
-      for (const [r, aSide] of [
-        [r1, 0],
-        [r2, 1],
-      ]) {
-        if (r.status !== "done") continue;
-        const sc = JSON.parse(r.scores || "[0,0]");
-        score[0] += sc[aSide];
-        score[1] += sc[1 - aSide];
-        if (r.winner === null) (points[0] += 0.5), (points[1] += 0.5);
-        else if (r.winner === aSide) points[0] += 1;
-        else points[1] += 1;
+      if (r1.status !== "done" || r2.status !== "done") {
+        // Both orientations are required to decide the duel fairly. Expose only
+        // replayable matches; infrastructure/void records have no public replay.
+        result = {
+          sides,
+          matches: [r1, r2].filter((r) => r.status === "done").map((r) => r.id),
+          points: null,
+          score: null,
+          winner: null,
+          reason: "incomplete_matches",
+        };
+      } else {
+        const points = [0, 0];
+        const score = [0, 0];
+        // r1: A is side 0; r2: A is side 1
+        for (const [r, aSide] of [[r1, 0], [r2, 1]]) {
+          const sc = JSON.parse(r.scores || "[0,0]");
+          score[0] += sc[aSide];
+          score[1] += sc[1 - aSide];
+          if (r.winner === null) (points[0] += 0.5), (points[1] += 0.5);
+          else if (r.winner === aSide) points[0] += 1;
+          else points[1] += 1;
+        }
+        const winner = points[0] !== points[1] ? (points[0] > points[1] ? 0 : 1) : score[0] !== score[1] ? (score[0] > score[1] ? 0 : 1) : null;
+        result = { sides, matches: [m1, m2], points, score, winner, reason: "played" };
       }
-      const winner = points[0] !== points[1] ? (points[0] > points[1] ? 0 : 1) : score[0] !== score[1] ? (score[0] > score[1] ? 0 : 1) : null;
-      result = { sides, matches: [m1, m2], points, score, winner, reason: "played" };
     } else if (valid[0] || valid[1]) {
       result = { sides, matches: [], winner: valid[0] ? 0 : 1, reason: "opponent_code_failed" };
     } else {

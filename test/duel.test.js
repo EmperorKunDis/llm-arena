@@ -6,6 +6,7 @@ import { createDuels, runDuel, nextPair, duelView } from "../src/server/duel.js"
 import { consume, duelBuckets, hashIp, quotaConfig } from "../src/server/quota.js";
 import { runSandboxedMatch } from "../src/runner/sandboxed-match.js";
 import { createArenaServer } from "../src/server/http.js";
+import { generateBot } from "../src/generate/pipeline.js";
 
 const src = (n) => readFileSync(new URL(`../src/bots/${n}.js`, import.meta.url), "utf8");
 const fence = (code) => "Here you go:\n```js\n" + code + "\n```";
@@ -64,9 +65,62 @@ describe("duels", () => {
 
   it("both failing is a void duel", async () => {
     const { store, jobs, duels } = setup();
-    const client = clientFor({ "a/rush:free": "no code", "c/bad:free": { ok: false, class: "infra", kind: "rate_limited" } });
+    const client = clientFor({ "a/rush:free": "no code", "c/bad:free": "also no code" });
     const d = await (await runDuel({ store, client, jobs, duels, modelA: "a/rush:free", modelB: "c/bad:free", runner: inProcess })).done;
     expect(d.result).toMatchObject({ winner: null, reason: "both_failed" });
+  });
+
+  it.each([
+    { class: "infra", kind: "rate_limited" },
+    { class: "rejected", kind: "model_forbidden" },
+    { class: "stop", kind: "payment_required" },
+  ])("does not award a win when generation is unavailable ($kind)", async (failure) => {
+    const { store, jobs, duels } = setup();
+    const client = clientFor({ "a/rush:free": fence(src("rush")), "b/eco:free": { ok: false, ...failure } });
+    const d = await (await runDuel({ store, client, jobs, duels, modelA: "a/rush:free", modelB: "b/eco:free" })).done;
+    expect(d.result).toMatchObject({ winner: null, reason: "generation_unavailable", matches: [], points: null, score: null });
+    expect(d.result.sides[1]).toMatchObject({ status: null, outcome: failure.class, kind: failure.kind });
+    expect(store.listMatches()).toEqual([]);
+  });
+
+  it("does not claim broken code when one generation fails and the other bot is invalid", async () => {
+    const { store, jobs, duels } = setup();
+    const client = clientFor({ "a/rush:free": "no code", "b/eco:free": { ok: false, class: "infra", kind: "timeout" } });
+    const d = await (await runDuel({ store, client, jobs, duels, modelA: "a/rush:free", modelB: "b/eco:free" })).done;
+    expect(d.result).toMatchObject({ winner: null, reason: "generation_unavailable", matches: [] });
+  });
+
+  it("does not penalize a model for returning its already-stored valid bot", async () => {
+    const { store, jobs, duels } = setup();
+    const client = clientFor({ "a/rush:free": fence(src("rush")), "b/eco:free": fence(src("economy")) });
+    expect(await generateBot({ store, client, modelId: "b/eco:free" })).toMatchObject({ stored: true, status: "valid" });
+    const d = await (await runDuel({ store, client, jobs, duels, modelA: "a/rush:free", modelB: "b/eco:free" })).done;
+    expect(d.result).toMatchObject({ winner: null, reason: "generation_unavailable", matches: [] });
+    expect(d.result.sides[1]).toMatchObject({ status: null, outcome: "duplicate" });
+    expect(store.listMatches()).toEqual([]);
+  });
+
+  it.each([0, 1])("requires both orientations before deciding a duel (%i completed)", async (completed) => {
+    const { store, jobs, duels } = setup();
+    const client = clientFor({ "a/rush:free": fence(src("rush")), "b/eco:free": fence(src("economy")) });
+    let calls = 0;
+    const runner = async (job) => calls++ < completed
+      ? inProcess(job)
+      : { ok: false, infrastructure: true, error: { kind: "runner_timeout" } };
+    const d = await (await runDuel({ store, client, jobs, duels, modelA: "a/rush:free", modelB: "b/eco:free", runner })).done;
+    expect(d.result).toMatchObject({ winner: null, reason: "incomplete_matches", points: null, score: null });
+    expect(d.result.matches).toHaveLength(completed);
+    expect(d.result.matches.every((id) => store.getMatch(id).status === "done")).toBe(true);
+    expect(store.listMatches({ status: "infra_error" })).toHaveLength(2 - completed);
+  });
+
+  it("does not call a void match a played draw", async () => {
+    const { store, jobs, duels } = setup();
+    const client = clientFor({ "a/rush:free": fence(src("rush")), "b/eco:free": fence(src("economy")) });
+    const runner = async () => ({ ok: true, result: { valid: false, winner: null, reason: "both_failed", scores: [0, 0], ticks: 0 }, record: {} });
+    const d = await (await runDuel({ store, client, jobs, duels, modelA: "a/rush:free", modelB: "b/eco:free", runner })).done;
+    expect(d.result).toMatchObject({ winner: null, reason: "incomplete_matches", points: null, score: null, matches: [] });
+    expect(store.listMatches({ status: "invalid" })).toHaveLength(2);
   });
 
   it("a duel costs two requests of the shared budget but one per-visitor duel", () => {

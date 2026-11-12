@@ -112,6 +112,34 @@ describe("arena: matchmaking, play and leaderboard", () => {
     expect(leaderboard(store).every((r) => r.games === 0)).toBe(true);
   });
 
+  it("rates only current-prompt bots while retaining reference and user opponents", () => {
+    const store = openStore();
+    const bot = (modelId, promptVersion, source = "pool") => store.insertBot({
+      modelId, promptVersion, source, status: "valid", code: `${modelId}-${promptVersion}`,
+    });
+    const currentA = bot("a:free", "current");
+    const currentB = bot("b:free", "current");
+    const reference = bot("reference/idle", "reference", "reference");
+    const user = bot("user/example", "user", "user");
+    const oldA = bot("a:free", "old"); // same model ID, different bot cohort
+    const oldOnly = bot("old-only:free", "old");
+    const game = (bot0, bot1, winner) => store.insertMatch({ bot0, bot1, winner, seed: 1, status: "done" });
+    game(currentA, currentB, 0);
+    game(reference, currentA, 1);
+    game(currentA, user, 0);
+    game(oldA, oldOnly, 0);
+    game(oldA, currentB, 0);
+    game(oldOnly, reference, 0);
+
+    const rows = leaderboard(store, "current");
+    expect(rows.map((r) => r.id).sort()).toEqual(["a:free", "b:free", "reference/idle", "user/example"]);
+    expect(rows.find((r) => r.id === "a:free")).toMatchObject({ games: 3, wins: 3, losses: 0, bots: 1 });
+    expect(rows.find((r) => r.id === "b:free")).toMatchObject({ games: 1, losses: 1 });
+    expect(rows.find((r) => r.id === "reference/idle")).toMatchObject({ games: 1, losses: 1 });
+    expect(rows.find((r) => r.id === "user/example")).toMatchObject({ games: 1, losses: 1, user: true });
+    store.close();
+  });
+
   it("a bot that crashes mid-match loses; models with only invalid code show up unrated", async () => {
     const store = openStore();
     seedReferenceBots(store);
